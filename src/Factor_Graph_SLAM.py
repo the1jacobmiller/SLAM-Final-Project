@@ -57,7 +57,7 @@ class Factor_Graph_SLAM:
                                                                             self.sigma_landmark)
 
         # Build a linear system
-        n_poses = len(odom_measurements)
+        n_poses = len(odom_measurements)+1
         A, b = self.create_linear_system(odom_measurements, landmark_measurements,
                                          p0, n_poses, n_landmarks)
 

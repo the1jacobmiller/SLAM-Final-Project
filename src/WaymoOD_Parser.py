@@ -41,11 +41,14 @@ class WaymoOD_Parser:
             frame = open_dataset.Frame()
             frame.ParseFromString(bytearray(data.numpy()))
 
-            odom_measurements.append(WaymoOD_Parser.getOdomMeasurement(frame, prev_frame))
+            if prev_frame is not None:
+                odom_measurements.append(WaymoOD_Parser.getOdomMeasurement(frame,
+                                                                           prev_frame))
             landmarks.append(WaymoOD_Parser.getLandmarks(frame))
             labeled_landmarks.append(WaymoOD_Parser.getLabeledLandmarks(frame))
             gt_traj.append(WaymoOD_Parser.getGroundTruthPose2D(frame))
 
+            prev_frame = frame
             if len(gt_traj) >= max_frames:
                 break
 
@@ -55,11 +58,8 @@ class WaymoOD_Parser:
 
     @staticmethod
     def getOdomMeasurement(frame, prev_frame):
-        if prev_frame is None:
-            return np.array([0., 0., 0.])
-
-        pose_t1 = WaymoOD_Parser.getGroundTruthPose(frame)
-        pose_t0 = WaymoOD_Parser.getGroundTruthPose(prev_frame)
+        pose_t1 = WaymoOD_Parser.getGroundTruthPose2D(frame)
+        pose_t0 = WaymoOD_Parser.getGroundTruthPose2D(prev_frame)
 
         delta_pose = pose_t1 - pose_t0
         delta_pose[2] = WaymoOD_Parser.warp2pi(delta_pose[2])
@@ -141,7 +141,7 @@ class WaymoOD_Parser:
         \return pose2d: [x, y, theta] of the robot
         '''
 
-        pose2d = [0., 0., 0.]
+        pose2d = np.array([0., 0., 0.])
 
         # TODO(jacob): calculate the 2D pose
 
