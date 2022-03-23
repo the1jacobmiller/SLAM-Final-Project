@@ -3,6 +3,8 @@ import tensorflow.compat.v1 as tf
 import math
 import numpy as np
 import itertools
+from scipy.spatial.transform import Rotation
+from Pose import Pose
 
 from waymo_open_dataset.utils import range_image_utils
 from waymo_open_dataset.utils import transform_utils
@@ -54,7 +56,7 @@ class WaymoOD_Parser:
 
         gt_landmarks = WaymoOD_Parser.getGroundTruthLandmarks(gt_traj, labeled_landmarks)
 
-        return odom_measurements, landmarks, gt_traj, gt_landmarks
+        return np.asarray(odom_measurements), landmarks, np.asarray(gt_traj), np.asarray(gt_landmarks)
 
     @staticmethod
     def getOdomMeasurement(frame, prev_frame):
@@ -79,7 +81,10 @@ class WaymoOD_Parser:
         '''
         landmarks = []
 
-        # TODO(jacob): get landmarks from frame
+        for laser_label in frame.laser_labels:
+            if laser_label.type == laser_label.TYPE_SIGN:
+                landmark_rel_pos = np.array([laser_label.box.center_x, laser_label.box.center_y])
+                landmarks.append(landmark_rel_pos)
 
         return landmarks
 
@@ -97,7 +102,9 @@ class WaymoOD_Parser:
         '''
         labeled_landmarks = []
 
-        # TODO(jacob): get landmarks with labels from frame
+        for laser_label in frame.laser_labels:
+            if laser_label.type == laser_label.TYPE_SIGN:
+                labeled_landmarks.append(laser_label)
 
         return labeled_landmarks
 
@@ -109,9 +116,10 @@ class WaymoOD_Parser:
 
         \param frame: the frame to retrieve the landmarks from, of type protobuf Frame
 
-        \return pose2d: [x, y, theta] of the robot in the designated frame
+        \return pose2D: [x, y, theta] of the robot in the designated frame
         '''
-        return WaymoOD_Parser.transform3DtoPose2D(frame.pose.transform)
+        pose2D = Pose(frame.pose.transform)
+        return pose2D.getPose2D()
 
     @staticmethod
     def getGroundTruthLandmarks(gt_traj, labeled_landmarks):
@@ -119,33 +127,34 @@ class WaymoOD_Parser:
         Gets the global positions of each unique landmark.
 
         \param gt_traj: the ground truth trajectory that the robot follows
-        \param labeled_landmarks: [distance_x, distance_y, ID] of the landmark
+        \param labeled_landmarks: [distance_x, distance_y] of the landmark
         to the robot for each landmark in a given frame. A given frame may have
         0 or multiple landmarks
 
         \return gt_landmarks: the ground truth positions of the landmarks
         '''
-        gt_landmarks = []
+        n_frames = len(gt_traj)
+        landmark_ids = []
+        gt_landmarks = [] # format: [x, y] in global frame
 
-        # TODO(jacob): get the ground truth landmark positions
+        for i in range(n_frames):
+            landmarks_frame_i = labeled_landmarks[i]
+            vehicle_pose = Pose(gt_traj[i])
+
+            unique_landmarks = []
+            for landmark in landmarks_frame_i:
+                if landmark.id not in landmark_ids:
+                    unique_landmarks.append(landmark)
+
+            for landmark in unique_landmarks:
+                landmark_ids.append(landmark.id)
+
+                landmark_rel_pos = np.array([landmark.box.center_x, landmark.box.center_y, 1])
+                H = vehicle_pose.getTransformationMatrix2D()
+                landmark_global_pos = (H @ landmark_rel_pos)[:2]
+                gt_landmarks.append(landmark_global_pos)
 
         return gt_landmarks
-
-    @staticmethod
-    def transform3DtoPose2D(transform3D):
-        '''
-        Converts a 3D transform protobuf to a 2D pose.
-
-        \param transform3D: 3D transform protobuf
-
-        \return pose2d: [x, y, theta] of the robot
-        '''
-
-        pose2d = np.array([0., 0., 0.])
-
-        # TODO(jacob): calculate the 2D pose
-
-        return pose2d
 
     @staticmethod
     def warp2pi(angle_rad):
