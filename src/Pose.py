@@ -8,6 +8,8 @@ class Pose:
     pose = np.zeros((7,))
 
     def __init__(self, transform):
+        if isinstance(transform, np.ndarray):
+            transform = transform.flatten()
 
         # The input is a 3D transformation matrix
         if len(transform) == 16:
