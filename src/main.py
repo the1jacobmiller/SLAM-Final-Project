@@ -15,9 +15,14 @@ if __name__ == "__main__":
         '--method',
         default='default',
         help='choices are default, pinv, qr, lu, qr_colamd, lu_colamd')
+    parser.add_argument('--n_dims', type=int, default=2,
+        help='[int] number of pose/landmark dimensions to use for SLAM')
     parser.add_argument('--plot_R', action='store_true')
     parser.add_argument('--plot_traj_and_landmarks', action='store_true')
     args = parser.parse_args()
+
+    # check argument values
+    assert(0 < args.n_dims < 4)
 
     # Parse the data to retrieve odom and landmark measurements for all frames
     # along with the ground truth trajctory and landmarks.
@@ -30,7 +35,7 @@ if __name__ == "__main__":
     assert gt_traj.shape == (n_frames,3)
     assert gt_landmarks.shape[1] == 2
 
-    SLAM = Factor_Graph_SLAM(args.method)
+    SLAM = Factor_Graph_SLAM(args.method, dimensions=args.n_dims)
     p0 = gt_traj[0] + np.random.normal(0, sigma_p0)
 
     traj, landmarks, R = None, None, None
@@ -41,7 +46,6 @@ if __name__ == "__main__":
         traj, landmarks, R, A, b = SLAM.run(odom_measurements[:i],
                                             landmark_measurements[:i],
                                             p0)
-
         runtime = time.time() - start_time
         print('Iteration', i, 'took', runtime, 's')
 
