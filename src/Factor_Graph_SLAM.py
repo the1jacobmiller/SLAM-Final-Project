@@ -17,7 +17,8 @@ class Factor_Graph_SLAM:
         '''
         \param method: the method to be used to solve the least squares
         optimization problem
-        \param dimensions: number of dimensions poses and landmarks have
+        \param dimensions: number of pose/landmark dimensions to use when
+                           solving SLAM problem
         '''
         self.method = method
 
@@ -125,7 +126,7 @@ class Factor_Graph_SLAM:
             b[row:row+self.dimensions] = \
                                 odom_measurements[odom_idx,:self.dimensions] @ sqrt_inv_odom
 
-        # Fill in landmark measurements/observations
+        # Fill in landmark measurements
         for meas_idx in range(n_lmark_meas):
             pose_idx = int(landmark_measurements[meas_idx,0])
             landmark_idx = int(landmark_measurements[meas_idx,1])
