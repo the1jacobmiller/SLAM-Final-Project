@@ -18,7 +18,7 @@ class Landmark_Associator:
         return euclid
     @staticmethod
     def create_landmark_measurement(pose_id, landmark_id,pose, landmark ):
-        return [pose_id, landmark_id, landmark[0] - pose[0], landmark[1] - pose[1]]
+        return np.array([pose_id, landmark_id, landmark[0] - pose[0], landmark[1] - pose[1]]).reshape(1,4)
 
     @staticmethod
     def associate_landmarks(prev_landmarks, new_landmarks,
@@ -52,22 +52,24 @@ class Landmark_Associator:
         '''
         #TODO: TUNE ME
         association_thresh = 0.001
-        landmark_measurements = []
+        # landmark_measurements = []
         pose_id = np.array(new_landmarks).shape[0] - 1
         print("pose_id", pose_id)
         n_landmarks = 0
         # TODO(corinne): associate new_landmarks with prev_landmarks
-        landmark_measurements = prev_landmarks
+        landmark_measurements = np.array(prev_landmarks)
         n_landmarks = len(prev_landmarks)
-        print("prev_landmarks first ", prev_landmarks)
-        print("new_landmarks first ",  np.array(new_landmarks).shape)
+        print("new_landmarks",np.array(new_landmarks).shape)
         next_landmarks = np.array(new_landmarks)[-1]
+        print("landmark_measurements",landmark_measurements.shape)
+        if len(prev_landmarks) != 0:
+            prev_landmarks = np.array(prev_landmarks).squeeze(0)
         for landmark in next_landmarks:
             landmark_associated = False
-            print("prev_landmarks",prev_landmarks)
+            print("prev_landmarks",np.array(prev_landmarks).shape)
             for prev in prev_landmarks:
-                print("prev",prev)
-                print("landmark",landmark)
+                print("prev",np.array(prev).shape)
+                print("landmark",np.array(landmark).shape)
                 if Landmark_Associator.get_euclidean_distance(prev, landmark) < association_thresh:
                     landmark_associated = True
                     #TODO: do we need to update the pose number if we see a landmark again
@@ -78,9 +80,17 @@ class Landmark_Associator:
 
                 new_landmark = Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, traj_estimate, landmark)
                 n_landmarks += 1
-                print("Added", new_landmark)
-                landmark_measurements.append(new_landmark)
+                print("Added", new_landmark.shape)
+                if landmark_measurements.size == 0:
+                    landmark_measurements = new_landmark
+                else:
+                    print("landmark_measurements", landmark_measurements.shape)
+                    landmark_measurements = np.concatenate((landmark_measurements, new_landmark), axis=0)
+                print("during landmark_measurements", landmark_measurements.shape)
+
+                # landmark_measurements.append(new_landmark)
 
         print("returned n_landmarks", n_landmarks)
         print("returned landmark_measurements", landmark_measurements)
+        print("returned landmark_measurements", landmark_measurements.shape)
         return landmark_measurements, n_landmarks

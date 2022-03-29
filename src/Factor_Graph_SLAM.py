@@ -139,7 +139,7 @@ class Factor_Graph_SLAM:
                                 -np.eye(self.dimensions) @ sqrt_inv_obs
 
             b[row:row+self.dimensions] = \
-                                observations[meas_idx,self.dimensions:] @ sqrt_inv_obs
+                                landmark_measurements[meas_idx,self.dimensions:] @ sqrt_inv_obs
 
         return csr_matrix(A), b
 
