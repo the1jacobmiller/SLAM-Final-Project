@@ -70,9 +70,10 @@ class Factor_Graph_SLAM:
         # Solve with the selected method
         x, R = Solver.solve(A, b, self.method)
         traj, landmarks = self.devectorize_state(x, n_poses)
-        landmarks = landmark_measurements[:,2:]
+        # landmarks = landmark_measurements[:,2:]
         # Store the optimized traj and landmark positions
         self.list_of_trajs.append(traj)
+        print("traj", traj)
         self.list_of_landmarks.append(landmarks)
 
         return traj, landmarks, R, A, b
