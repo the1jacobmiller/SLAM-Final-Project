@@ -52,7 +52,7 @@ if __name__ == "__main__":
         print(landmarks)
         print(gt_landmarks)
         SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks)
-        exit(1)
+        # exit(1)
 
     if args.plot_R and R is not None:
         plt.spy(R)

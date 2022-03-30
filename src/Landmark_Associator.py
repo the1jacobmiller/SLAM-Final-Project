@@ -39,11 +39,13 @@ class Landmark_Associator:
     @staticmethod
     def associate_with_prev_landmarks(observation, pose, prev_landmarks):
         # TODO: TUNE ME
-        association_thresh = 0.001
+        association_thresh = 10
 
         observation_global_frame = Landmark_Associator.transform_to_global_frame(observation, pose)
         for prev_landmark_id in range(len(prev_landmarks)):
-            prev_landmark = prev_landmarks[prev_landmark_id]
+            prev_landmark = Landmark_Associator.transform_to_global_frame( prev_landmarks[prev_landmark_id], pose)
+
+            # prev_landmark = prev_landmarks[prev_landmark_id]
             # print(prev_landmark)
             # print( observation_global_frame)
             dist = Landmark_Associator.get_euclidean_distance(prev_landmark, observation_global_frame)
@@ -80,7 +82,7 @@ class Landmark_Associator:
         \return n_landmarks: the number of unique landmarks
         '''
         #todo: len(prev_landmarks)
-        n_landmarks = 0
+        n_landmarks = len(prev_landmarks)
         landmark_measurements = []
         #Note this will iterate through the poses. We will have an extra landmark for the current step where
         #the pose has yet to be calculated. We will need to estimate odom and compute the associations from there
@@ -94,16 +96,9 @@ class Landmark_Associator:
                 if landmark_id == -1:
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, observation, pose))
                     n_landmarks += 1
-
-                    # landmark_measurements.append()
-                    # new_landmark = Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, observation, pose)
-                    # landmark_measurements = np.concatenate((landmark_measurements, new_landmark), axis=0)
                 else:
-                    # new_landmark = Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, observation, pose)
-                    # landmark_measurements = np.concatenate((landmark_measurements, new_landmark), axis=0)
-
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, observation, pose))
-
+        #TODO: THIS CURRENTLY ADDS THE LANDMARKS 2x.
         new_pose_estimate = Landmark_Associator.apply_odom_step_2d(odom_measurement, traj_estimate[-1])
         pose_id = len(traj_estimate)
         landmarks = new_landmarks[-1]
@@ -122,6 +117,25 @@ class Landmark_Associator:
         print("returned landmark_measurements", landmark_measurements)
         print("returned landmark_measurements", landmark_measurements.shape)
         return landmark_measurements, n_landmarks
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
 # # landmark_measurements = []
         # pose_id = np.array(new_landmarks).shape[0] - 1
         # print("pose_id", pose_id)
