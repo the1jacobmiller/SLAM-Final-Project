@@ -52,7 +52,7 @@ class Factor_Graph_SLAM:
             traj_estimate = self.list_of_trajs[-1]
         else:
             prev_landmarks = []
-            traj_estimate = p0
+            traj_estimate = [p0]
 
         # Associate landmark measurements with previously seen landmarks
         landmark_measurements, n_landmarks = Associator.associate_landmarks(prev_landmarks,
@@ -63,6 +63,7 @@ class Factor_Graph_SLAM:
 
         # Build a linear system
         n_poses = len(odom_measurements)+1
+        # n_poses = len(traj_estimate)
         A, b = self.create_linear_system(odom_measurements, landmark_measurements,
                                          p0, n_poses, n_landmarks)
 
@@ -103,8 +104,8 @@ class Factor_Graph_SLAM:
         N = n_poses * self.dimensions + n_landmarks * self.dimensions
 
         A = np.zeros((M, N))
+        # print("A",A.shape)
         b = np.zeros((M, ))
-
         # Prepare Sigma^{-1/2}.
         sqrt_inv_odom = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_odom))
         sqrt_inv_obs = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_landmark))
@@ -130,7 +131,6 @@ class Factor_Graph_SLAM:
         for meas_idx in range(n_lmark_meas):
             pose_idx = int(landmark_measurements[meas_idx,0])
             landmark_idx = int(landmark_measurements[meas_idx,1])
-
             row = self.dimensions*(1+n_odom+meas_idx)
             A[row:row+self.dimensions, \
               self.dimensions*(n_poses + landmark_idx):self.dimensions*(n_poses + landmark_idx+1)] = \

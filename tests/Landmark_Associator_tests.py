@@ -15,32 +15,34 @@ class TestLandmarkAssociator(unittest.TestCase):
     def test_first_iteration(self):
         landmarks = [[[1,1],[2,2],[3,3]]]
         prev_landmarks = []
-        traj_estimate = [0,0,np.pi]
+        traj_estimate = [[0,0,np.pi]]
         landmark_measurements, n_landmarks = la.Landmark_Associator.associate_landmarks(prev_landmarks, landmarks,traj_estimate, odom_measurement=None, sigma_landmark=None)
         self.assertEqual(n_landmarks,3)
-        self.assertTrue((landmark_measurements == [[0, 0, 1, 1],[0, 1, 2, 2],[0, 2, 3, 3]]).all())
+        self.assertTrue((landmark_measurements == [[0, 0, -1, -1],[0, 1, -2, -2],[0, 2, -3, -3]]).all())
 
     def test_second_iteration(self):
         #run first iteration same as above
         landmarks = [[[1, 1], [2, 2], [3, 3]]]
         prev_landmarks = []
-        traj_estimate = [0, 0, np.pi]
+        traj_estimate = [[0, 0, np.pi]]
         landmark_measurements, n_landmarks = la.Landmark_Associator.associate_landmarks(prev_landmarks, landmarks,
                                                                                         traj_estimate,
                                                                                         odom_measurement=None,
                                                                                         sigma_landmark=None)
         self.assertEqual(n_landmarks, 3)
-        self.assertTrue((landmark_measurements == [[0, 0, 1, 1], [0, 1, 2, 2], [0, 2, 3, 3]]).all())
+        self.assertTrue((landmark_measurements == [[0, 0, -1, -1], [0, 1, -2, -2], [0, 2, -3, -3]]).all())
 
         #We should only add one onto the list here
-        prev_landmarks = landmarks
+        prev_landmarks = [[1, 1], [2, 2], [3, 3]]
         landmarks = [[[1, 1], [5,5]]]
+        traj_estimate = [[0, 0, np.pi],[6, 6, np.pi]]
+
         landmark_measurements, n_landmarks = la.Landmark_Associator.associate_landmarks(prev_landmarks, landmarks,
                                                                                         traj_estimate,
                                                                                         odom_measurement=None,
                                                                                         sigma_landmark=None)
-        self.assertEqual(n_landmarks, 4)
-        self.assertTrue((landmark_measurements == [[0, 0, 1, 1], [0, 1, 2, 2], [0, 2, 3, 3]]).all())
+        self.assertEqual(n_landmarks, 2)
+        self.assertTrue((landmark_measurements == [[0, 0, -1, -1],[1,1,-5,-5]]).all())
 
 
 
