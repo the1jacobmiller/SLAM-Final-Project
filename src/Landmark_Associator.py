@@ -93,14 +93,10 @@ class Landmark_Associator:
             pose = traj_estimate[pose_id]
             landmarks = new_landmarks[pose_id]
 
-            print("Landmarks for pose: ", pose_id, "... odom meas:", odom_measurement)
-
             # loop through landmark measurements corresponding with pose
             for lmark_local_frame in landmarks:
                 lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
                 observation = lmark_global_frame - pose[:2]
-
-                print("Local frame: ", lmark_local_frame, "\tobs: ", observation)
 
                 landmark_id = Landmark_Associator.associate_with_prev_landmarks(lmark_global_frame, pose, prev_landmarks)
 
