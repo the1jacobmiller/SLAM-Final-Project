@@ -6,7 +6,7 @@ import time
 from WaymoOD_Parser import WaymoOD_Parser
 from Factor_Graph_SLAM import Factor_Graph_SLAM
 
-# TODO: ♫tune me♫
+# TODO: tune me
 sigma_p0_pos = 2.0
 sigma_p0_angle = 0.1
 

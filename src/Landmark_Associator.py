@@ -38,7 +38,7 @@ class Landmark_Associator:
 
     @staticmethod
     def associate_with_prev_landmarks(observation, pose, prev_landmarks):
-        # TODO: 🎼TUNE ME
+        # TODO: TUNE ME
         association_thresh = 0.5 # tuned for euclidean dist with no p0 noise
 
         for prev_landmark_id in range(len(prev_landmarks)):
@@ -86,17 +86,21 @@ class Landmark_Associator:
         # JS: re:above comment
         #         the way this works now, that is not the case, but if we use the odom_measurements (which we def should),
         #         this is something we need to think about. Seems like we get 1 more than we need? or maybe p0 is
-        #         behind the first pose measurements are taken from? 
+        #         behind the first pose measurements are taken from?
 
         # iterate through poses in trajectory
         for pose_id in range(len(traj_estimate)):
             pose = traj_estimate[pose_id]
             landmarks = new_landmarks[pose_id]
 
+            print("Landmarks for pose: ", pose_id, "... odom meas:", odom_measurement)
+
             # loop through landmark measurements corresponding with pose
             for lmark_local_frame in landmarks:
                 lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
                 observation = lmark_global_frame - pose[:2]
+
+                print("Local frame: ", lmark_local_frame, "\tobs: ", observation)
 
                 landmark_id = Landmark_Associator.associate_with_prev_landmarks(lmark_global_frame, pose, prev_landmarks)
 
