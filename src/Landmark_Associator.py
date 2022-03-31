@@ -18,7 +18,6 @@ class Landmark_Associator:
     @staticmethod
     def apply_odom_step_2d(odom_measurement, pose):
         return np.array([pose[0] + odom_measurement[0], pose[1] + odom_measurement[1], pose[2] + odom_measurement[2]])
-        # return np.array([pose[0] + odom_measurement[0], pose[1] + odom_measurement[1]])
 
     @staticmethod
     def transform_to_global_frame(observation, pose):
@@ -39,22 +38,20 @@ class Landmark_Associator:
 
     @staticmethod
     def associate_with_prev_landmarks(observation, pose, prev_landmarks):
-        # TODO: TUNE ME
-        association_thresh = 5.
-        observation_global_frame = Landmark_Associator.transform_to_global_frame(observation, pose)
+        # TODO: 🎼TUNE ME
+        association_thresh = 0.5 # tuned for euclidean dist with no p0 noise
+
         for prev_landmark_id in range(len(prev_landmarks)):
             prev_landmark = prev_landmarks[prev_landmark_id]
-            # print(prev_landmark,observation_global_frame)
-            dist = Landmark_Associator.get_euclidean_distance(prev_landmark, observation_global_frame)
-            # print("dist",dist)
+            dist = Landmark_Associator.get_euclidean_distance(prev_landmark, observation)
+
             if dist < association_thresh:
-                # print("Associated with", prev_landmark_id)
                 return prev_landmark_id
         return -1
 
     @staticmethod
-    def create_landmark_measurement(pose_id, landmark_id, landmark):
-        return np.array([pose_id, landmark_id, landmark[0], landmark[1]])
+    def create_landmark_measurement(pose_id, landmark_id, observation):
+        return np.array([pose_id, landmark_id, observation[0], observation[1]])
 
     @staticmethod
     def associate_landmarks(prev_landmarks, new_landmarks,
@@ -79,123 +76,41 @@ class Landmark_Associator:
         pose_id, landmark_id,
         \return n_landmarks: the number of unique landmarks
         '''
-        #todo: This should be len(prev_landmarks) but it crashes the system
-        # n_landmarks = len(prev_landmarks)
-        print("new_landmarks",new_landmarks)
+
         n_landmarks = len(prev_landmarks)
-        print("len(prev_landmarks)",len(prev_landmarks))
-        print("len(new_landmarks)",len(new_landmarks))
-        print("traj_estimate",traj_estimate)
 
         landmark_measurements = []
-        #Note this will iterate through the poses. We will have an extra landmark for the current step where
-        #the pose has yet to be calculated. We will need to estimate odom and compute the associations from there
+        #CA: Note this will iterate through the poses. We will have an extra landmark for the current step where
+        #     the pose has yet to be calculated. We will need to estimate odom and compute the associations from there
 
+        # JS: re:above comment
+        #         the way this works now, that is not the case, but if we use the odom_measurements (which we def should),
+        #         this is something we need to think about. Seems like we get 1 more than we need? or maybe p0 is
+        #         behind the first pose measurements are taken from? 
+
+        # iterate through poses in trajectory
         for pose_id in range(len(traj_estimate)):
             pose = traj_estimate[pose_id]
-
             landmarks = new_landmarks[pose_id]
-            for observation in landmarks:
-                landmark_id = Landmark_Associator.associate_with_prev_landmarks(observation, pose, prev_landmarks)
-                if landmark_id == -1:
-                    print("landmark was not associated")
+
+            # loop through landmark measurements corresponding with pose
+            for lmark_local_frame in landmarks:
+                lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
+                observation = lmark_global_frame - pose[:2]
+
+                landmark_id = Landmark_Associator.associate_with_prev_landmarks(lmark_global_frame, pose, prev_landmarks)
+
+                if landmark_id == -1: # no match
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, observation))
+                    # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
+                    if len(prev_landmarks) > 0:
+                        prev_landmarks = np.vstack([prev_landmarks, lmark_global_frame])
+                    else:
+                        prev_landmarks = lmark_global_frame.reshape(1,2)
                     n_landmarks += 1
                 else:
+                    # found a match
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, observation))
-        # #TODO: THIS CURRENTLY ADDS THE LANDMARKS 2x.
-        # vehicle_pose = Pose(traj_estimate[-1])
-        # H = vehicle_pose.getTransformationMatrix2D()
-        # landmark_rel_pos = np.array([odom_measurement[0], odom_measurement[1], 1])
-        # landmark_global_pos = (H @ landmark_rel_pos)[:2]
-        #
-        #
-        # new_pose_estimate = Landmark_Associator.apply_odom_step_2d(landmark_global_pos, traj_estimate[-1])
-        # print("odom_measurement",landmark_global_pos)
-        # print("last pose",traj_estimate[-1])
-        # pose_id = len(traj_estimate)
-        # landmarks = new_landmarks[-1]
-        # for observation in landmarks:
-        #     landmark_id = Landmark_Associator.associate_with_prev_landmarks(observation, new_pose_estimate, prev_landmarks)
-        #     if landmark_id == -1:
-        #         landmark_measurements.append(
-        #             Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, new_pose_estimate))
-        #         n_landmarks += 1
-        #
-        #     else:
-        #         landmark_measurements.append(
-        #             Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, new_pose_estimate))
+
         landmark_measurements = np.array(landmark_measurements)
-        # print(landmark_measurements)
-        # temp, return_inv = np.unique(landmark_measurements,return_inverse=True,axis=1)
-        # print(temp)
-        # print(return_inv)
-        # landmark_measurements = temp.transpose(return_inv)
-        print("returned n_landmarks", n_landmarks)
-        print("returned len(landmark_measurements)", len(landmark_measurements))
-        print("returned landmark_measurements", landmark_measurements)
-        print("new_landmarks",np.array(new_landmarks).shape)
-        # assert(len(landmark_measurements) >= n_landmarks)
-        # print("returned landmark_measurements", landmark_measurements.shape)
         return landmark_measurements, n_landmarks
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# # landmark_measurements = []
-        # pose_id = np.array(new_landmarks).shape[0] - 1
-        # print("pose_id", pose_id)
-        # n_landmarks = 0
-        # # TODO(corinne): associate new_landmarks with prev_landmarks
-        # landmark_measurements = np.array(prev_landmarks)
-        # n_landmarks = len(prev_landmarks)
-        # print("new_landmarks",np.array(new_landmarks).shape)
-        # next_landmarks = np.array(new_landmarks)[-1]
-        # print("landmark_measurements",landmark_measurements.shape)
-        # if len(prev_landmarks) != 0:
-        #     prev_landmarks = np.array(prev_landmarks).squeeze(0)
-        # for landmark in next_landmarks:
-        #     landmark_associated = False
-        #     print("prev_landmarks",np.array(prev_landmarks).shape)
-        #     for prev in prev_landmarks:
-        #         print("prev",np.array(prev).shape)
-        #         print("landmark",np.array(landmark).shape)
-        #         if Landmark_Associator.get_euclidean_distance(prev, landmark) < association_thresh:
-        #             landmark_associated = True
-        #             #TODO: do we need to update the pose number if we see a landmark again
-        #             #prev[0] = pose_id
-        #             break
-        #     if not landmark_associated:
-        #         print(np.array(traj_estimate).shape, np.array(landmark).shape)
-        #
-        #         new_landmark = Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, traj_estimate, landmark)
-        #         n_landmarks += 1
-        #         print("Added", new_landmark.shape)
-        #         if landmark_measurements.size == 0:
-        #             landmark_measurements = new_landmark
-        #         else:
-        #             print("landmark_measurements", landmark_measurements.shape)
-        #             landmark_measurements = np.concatenate((landmark_measurements, new_landmark), axis=0)
-        #         print("during landmark_measurements", landmark_measurements.shape)
-        #
-        #         # landmark_measurements.append(new_landmark)
-        #
-        # print("returned n_landmarks", n_landmarks)
-        # print("returned landmark_measurements", landmark_measurements)
-        # print("returned landmark_measurements", landmark_measurements.shape)
-        # return landmark_measurements, n_landmarks
