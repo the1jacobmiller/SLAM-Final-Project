@@ -73,7 +73,6 @@ class Factor_Graph_SLAM:
         # landmarks = landmark_measurements[:,2:]
         # Store the optimized traj and landmark positions
         self.list_of_trajs.append(traj)
-        print("traj", traj)
         self.list_of_landmarks.append(landmarks)
 
         return traj, landmarks, R, A, b
@@ -105,7 +104,6 @@ class Factor_Graph_SLAM:
         N = n_poses * self.dimensions + n_landmarks * self.dimensions
 
         A = np.zeros((M, N))
-        # print("A",A.shape)
         b = np.zeros((M, ))
         # Prepare Sigma^{-1/2}.
         sqrt_inv_odom = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_odom))
@@ -133,6 +131,8 @@ class Factor_Graph_SLAM:
             pose_idx = int(landmark_measurements[meas_idx,0])
             landmark_idx = int(landmark_measurements[meas_idx,1])
             row = self.dimensions*(1+n_odom+meas_idx)
+            # print("Asize",A.shape)
+            # print( self.dimensions*(n_poses + landmark_idx),self.dimensions*(n_poses + landmark_idx+1))
             A[row:row+self.dimensions, \
               self.dimensions*(n_poses + landmark_idx):self.dimensions*(n_poses + landmark_idx+1)] = \
                                 np.eye(self.dimensions) @ sqrt_inv_obs
@@ -140,7 +140,7 @@ class Factor_Graph_SLAM:
                                 -np.eye(self.dimensions) @ sqrt_inv_obs
 
             b[row:row+self.dimensions] = \
-                                landmark_measurements[meas_idx,self.dimensions:] @ sqrt_inv_obs
+                                landmark_measurements[meas_idx,2:2+self.dimensions] @ sqrt_inv_obs
 
         return csr_matrix(A), b
 

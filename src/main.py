@@ -48,9 +48,6 @@ if __name__ == "__main__":
                                             p0)
         runtime = time.time() - start_time
         print('Iteration', i, 'took', runtime, 's')
-        print(traj)
-        print(landmarks)
-        print(gt_landmarks)
         SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks)
         # exit(1)
 
