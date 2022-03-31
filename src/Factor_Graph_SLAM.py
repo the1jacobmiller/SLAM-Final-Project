@@ -100,8 +100,15 @@ class Factor_Graph_SLAM:
         n_odom = len(odom_measurements)
         n_lmark_meas = len(landmark_measurements)
 
-        M = (n_odom + 1) * self.dimensions + n_lmark_meas * self.dimensions
-        N = n_poses * self.dimensions + n_landmarks * self.dimensions
+        state_dims = 0
+        if self.dimensions == 2:
+            state_dims = 3 # dims are x,y,theta            
+        elif self.dimensions == 3:
+            print("3D NOT IMPLEMENTED IN create_linear_system()!!!")
+            return None
+
+        M = (n_odom + 1) * (state_dims) + n_lmark_meas * (state_dims)
+        N = n_poses * (state_dims) + n_landmarks * (state_dims)
 
         A = np.zeros((M, N))
         b = np.zeros((M, ))
@@ -110,33 +117,33 @@ class Factor_Graph_SLAM:
         sqrt_inv_obs = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_landmark))
 
         # anchor initial state at p0
-        A[:self.dimensions,:self.dimensions] = np.eye(self.dimensions)
-        b[:self.dimensions] = p0[:self.dimensions]
+        A[:state_dims,:state_dims+1] = np.eye(state_dims)
+        b[:state_dims] = p0[:state_dims]
 
         # Fill in odometry measurements
         for odom_idx in range(n_odom):
-            col = odom_idx*self.dimensions
-            row = self.dimensions + col # add space from anchoring initial point
+            col = odom_idx*state_dims
+            row = state_dims + col # add space from anchoring initial point
 
-            A[row:row+self.dimensions, col:col+self.dimensions] = \
-                                -np.eye(self.dimensions) @ sqrt_inv_odom
-            A[row:row+self.dimensions, \
-              col+self.dimensions:col+2*self.dimensions] = \
-                                np.eye(self.dimensions) @ sqrt_inv_odom
-            b[row:row+self.dimensions] = \
-                                odom_measurements[odom_idx,:self.dimensions] @ sqrt_inv_odom
+            A[row:row+state_dims, col:col+state_dims] = \
+                                -np.eye(state_dims) @ sqrt_inv_odom
+            A[row:row+state_dims, \
+              col+state_dims:col+2*state_dims] = \
+                                np.eye(state_dims) @ sqrt_inv_odom
+            b[row:row+state_dims] = \
+                                odom_measurements[odom_idx,:state_dims] @ sqrt_inv_odom
 
         # Fill in landmark measurements
         for meas_idx in range(n_lmark_meas):
             pose_idx = int(landmark_measurements[meas_idx,0])
             landmark_idx = int(landmark_measurements[meas_idx,1])
-            row = self.dimensions*(1+n_odom+meas_idx)
+            row = state_dims*(1+n_odom) + self.dimensions*meas_idx
             # print("Asize",A.shape)
             # print( self.dimensions*(n_poses + landmark_idx),self.dimensions*(n_poses + landmark_idx+1))
             A[row:row+self.dimensions, \
-              self.dimensions*(n_poses + landmark_idx):self.dimensions*(n_poses + landmark_idx+1)] = \
+              (state_dims*n_poses + self.dimensions*landmark_idx):(state_dims*n_poses + self.dimensions*(landmark_idx+1))] = \
                                 np.eye(self.dimensions) @ sqrt_inv_obs
-            A[row:row+self.dimensions, self.dimensions*pose_idx:self.dimensions*(pose_idx+1)] = \
+            A[row:row+self.dimensions, state_dims*pose_idx:(state_dims*(pose_idx)+self.dimensions)] = \
                                 -np.eye(self.dimensions) @ sqrt_inv_obs
 
             b[row:row+self.dimensions] = \
