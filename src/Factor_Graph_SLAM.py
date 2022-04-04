@@ -25,9 +25,12 @@ class Factor_Graph_SLAM:
         assert(isinstance(dimensions, int))
         self.dimensions = dimensions
 
-        # Uncertainty Values
-        self.sigma_odom = np.eye(self.dimensions)
-        self.sigma_landmark = np.eye(self.dimensions)
+        # Uncertainty Values (maybe TODO - shouldn't just be ones)
+        if self.dimensions == 2:
+            self.sigma_odom = np.eye(self.dimensions+1)
+            self.sigma_landmark = np.eye(self.dimensions)
+        else:
+            raise NotImplementedError
 
     def run(self, odom_measurements, landmarks, p0):
         '''
@@ -52,7 +55,7 @@ class Factor_Graph_SLAM:
             traj_estimate = self.list_of_trajs[-1]
         else:
             prev_landmarks = []
-            traj_estimate = p0
+            traj_estimate = [p0]
 
         # Associate landmark measurements with previously seen landmarks
         landmark_measurements, n_landmarks = Associator.associate_landmarks(prev_landmarks,
@@ -63,13 +66,13 @@ class Factor_Graph_SLAM:
 
         # Build a linear system
         n_poses = len(odom_measurements)+1
+        # n_poses = len(traj_estimate)
         A, b = self.create_linear_system(odom_measurements, landmark_measurements,
                                          p0, n_poses, n_landmarks)
 
         # Solve with the selected method
         x, R = Solver.solve(A, b, self.method)
         traj, landmarks = self.devectorize_state(x, n_poses)
-
         # Store the optimized traj and landmark positions
         self.list_of_trajs.append(traj)
         self.list_of_landmarks.append(landmarks)
@@ -99,47 +102,58 @@ class Factor_Graph_SLAM:
         n_odom = len(odom_measurements)
         n_lmark_meas = len(landmark_measurements)
 
-        M = (n_odom + 1) * self.dimensions + n_lmark_meas * self.dimensions
-        N = n_poses * self.dimensions + n_landmarks * self.dimensions
+        pose_dims = 0
+        if self.dimensions == 2:
+            pose_dims = 3 # dims are x,y,theta
+        elif self.dimensions == 3:
+            print("3D NOT IMPLEMENTED IN create_linear_system()!!!")
+            raise NotImplementedError
+
+        M = (n_odom + 1) * (pose_dims) + n_lmark_meas * (self.dimensions)
+        N = n_poses * (pose_dims) + n_landmarks * (self.dimensions)
 
         A = np.zeros((M, N))
         b = np.zeros((M, ))
-
         # Prepare Sigma^{-1/2}.
         sqrt_inv_odom = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_odom))
         sqrt_inv_obs = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_landmark))
 
         # anchor initial state at p0
-        A[:self.dimensions,:self.dimensions] = np.eye(self.dimensions)
-        b[:self.dimensions] = p0[:self.dimensions]
+        A[:pose_dims,:pose_dims] = np.eye(pose_dims)
+        b[:pose_dims] = p0[:pose_dims]
 
         # Fill in odometry measurements
         for odom_idx in range(n_odom):
-            col = odom_idx*self.dimensions
-            row = self.dimensions + col # add space from anchoring initial point
+            col = odom_idx*pose_dims
+            row = pose_dims + col # add space from anchoring initial point
 
-            A[row:row+self.dimensions, col:col+self.dimensions] = \
-                                -np.eye(self.dimensions) @ sqrt_inv_odom
-            A[row:row+self.dimensions, \
-              col+self.dimensions:col+2*self.dimensions] = \
-                                np.eye(self.dimensions) @ sqrt_inv_odom
-            b[row:row+self.dimensions] = \
-                                odom_measurements[odom_idx,:self.dimensions] @ sqrt_inv_odom
+            # -I for current pose rows
+            A[row:row+pose_dims, col:col+pose_dims] = \
+                                -np.eye(pose_dims) @ sqrt_inv_odom
+            # I for next pose rows
+            A[row:row+pose_dims, \
+              col+pose_dims:col+2*pose_dims] = \
+                                np.eye(pose_dims) @ sqrt_inv_odom
+            # add odom measurement to b
+            b[row:row+pose_dims] = \
+                                odom_measurements[odom_idx,:pose_dims] @ sqrt_inv_odom
 
         # Fill in landmark measurements
         for meas_idx in range(n_lmark_meas):
             pose_idx = int(landmark_measurements[meas_idx,0])
             landmark_idx = int(landmark_measurements[meas_idx,1])
+            row = pose_dims*(1+n_odom) + self.dimensions*meas_idx
 
-            row = self.dimensions*(1+n_odom+meas_idx)
+            # I for landmark rows
             A[row:row+self.dimensions, \
-              self.dimensions*(n_poses + landmark_idx):self.dimensions*(n_poses + landmark_idx+1)] = \
+              (pose_dims*n_poses + self.dimensions*landmark_idx):(pose_dims*n_poses + self.dimensions*(landmark_idx+1))] = \
                                 np.eye(self.dimensions) @ sqrt_inv_obs
-            A[row:row+self.dimensions, self.dimensions*pose_idx:self.dimensions*(pose_idx+1)] = \
+            # -I for pose rows
+            A[row:row+self.dimensions, pose_dims*pose_idx:(pose_dims*(pose_idx)+self.dimensions)] = \
                                 -np.eye(self.dimensions) @ sqrt_inv_obs
-
+            # add measurement to b
             b[row:row+self.dimensions] = \
-                                observations[meas_idx,self.dimensions:] @ sqrt_inv_obs
+                                landmark_measurements[meas_idx,2:2+self.dimensions] @ sqrt_inv_obs
 
         return csr_matrix(A), b
 
@@ -157,8 +171,8 @@ class Factor_Graph_SLAM:
         Rewritten in Python by Wei Dong (weidong@andrew.cmu.edu), 2021
     '''
     def devectorize_state(self, x, n_poses):
-        traj = x[:n_poses * self.dimensions].reshape((-1, self.dimensions))
-        landmarks = x[n_poses * self.dimensions:].reshape((-1, self.dimensions))
+        traj = x[:n_poses * (self.dimensions+1)].reshape((-1, self.dimensions+1))
+        landmarks = x[n_poses * (self.dimensions+1):].reshape((-1, self.dimensions))
         return traj, landmarks
 
     '''

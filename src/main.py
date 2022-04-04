@@ -6,7 +6,9 @@ import time
 from WaymoOD_Parser import WaymoOD_Parser
 from Factor_Graph_SLAM import Factor_Graph_SLAM
 
-sigma_p0 = 2.0
+# TODO: tune me
+sigma_p0_pos = 2.0
+sigma_p0_angle = 0.1
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -36,7 +38,8 @@ if __name__ == "__main__":
     assert gt_landmarks.shape[1] == 2
 
     SLAM = Factor_Graph_SLAM(args.method, dimensions=args.n_dims)
-    p0 = gt_traj[0] + np.random.normal(0, sigma_p0)
+    p0 = gt_traj[0] + np.random.normal(0, sigma_p0_pos)
+    p0[2] = gt_traj[0][2] + np.random.normal(0, sigma_p0_angle)
 
     traj, landmarks, R = None, None, None
     for i in range(1,n_frames):
@@ -54,5 +57,6 @@ if __name__ == "__main__":
         plt.show()
 
     # Visualize the final result
-    if args.plot_traj_and_landmarks:
-        SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks)
+    # TODO: add this conditional back in, just removed for debugging
+    # if args.plot_traj_and_landmarks:
+    SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks)
