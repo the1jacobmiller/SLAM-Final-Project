@@ -39,7 +39,7 @@ class Landmark_Associator:
     @staticmethod
     def associate_with_prev_landmarks(observation, pose, prev_landmarks):
         # TODO: TUNE ME
-        association_thresh = 0.5 # tuned for euclidean dist with no p0 noise
+        association_thresh = 1.0 # tuned for euclidean dist with no p0 noise
 
         for prev_landmark_id in range(len(prev_landmarks)):
             prev_landmark = prev_landmarks[prev_landmark_id]
@@ -79,16 +79,7 @@ class Landmark_Associator:
 
         n_landmarks = len(prev_landmarks)
 
-        # print(f"prev landmarks:\n {prev_landmarks}")
-
         landmark_measurements = []
-        #CA: Note this will iterate through the poses. We will have an extra landmark for the current step where
-        #     the pose has yet to be calculated. We will need to estimate odom and compute the associations from there
-
-        # JS: re:above comment
-        #         the way this works now, that is not the case, but if we use the odom_measurements (which we def should),
-        #         this is something we need to think about. Seems like we get 1 more than we need? or maybe p0 is
-        #         behind the first pose measurements are taken from?
 
         # iterate through poses in trajectory
         for pose_id in range(len(traj_estimate)):
@@ -99,10 +90,12 @@ class Landmark_Associator:
             for lmark_local_frame in landmarks:
                 lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
                 # observation = lmark_global_frame - pose[:2]
+                # print(f"\t\t global lmark: {lmark_global_frame}", end="")
 
                 landmark_id = Landmark_Associator.associate_with_prev_landmarks(lmark_global_frame, pose, prev_landmarks)
 
                 if landmark_id == -1: # no match
+                    # print("\tNO MATCH")
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, lmark_local_frame))
                     # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
                     if len(prev_landmarks) > 0:
@@ -111,6 +104,7 @@ class Landmark_Associator:
                         prev_landmarks = lmark_global_frame.reshape(1,2)
                     n_landmarks += 1
                 else:
+                    # print("\t match  ", landmark_id)
                     # found a match
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, lmark_local_frame))
 
