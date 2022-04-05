@@ -51,7 +51,8 @@ if __name__ == "__main__":
                                             p0)
         runtime = time.time() - start_time
         print('Iteration', i, 'took', runtime, 's')
-
+        if i>0:
+            break
     if args.plot_R and R is not None:
         plt.spy(R)
         plt.show()

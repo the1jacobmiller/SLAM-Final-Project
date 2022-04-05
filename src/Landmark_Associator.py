@@ -79,6 +79,8 @@ class Landmark_Associator:
 
         n_landmarks = len(prev_landmarks)
 
+        print(f"prev landmarks:\n {prev_landmarks}")
+
         landmark_measurements = []
         #CA: Note this will iterate through the poses. We will have an extra landmark for the current step where
         #     the pose has yet to be calculated. We will need to estimate odom and compute the associations from there
@@ -96,12 +98,12 @@ class Landmark_Associator:
             # loop through landmark measurements corresponding with pose
             for lmark_local_frame in landmarks:
                 lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
-                observation = lmark_global_frame - pose[:2]
+                # observation = lmark_global_frame - pose[:2]
 
                 landmark_id = Landmark_Associator.associate_with_prev_landmarks(lmark_global_frame, pose, prev_landmarks)
 
                 if landmark_id == -1: # no match
-                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, observation))
+                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, lmark_local_frame))
                     # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
                     if len(prev_landmarks) > 0:
                         prev_landmarks = np.vstack([prev_landmarks, lmark_global_frame])
@@ -110,7 +112,7 @@ class Landmark_Associator:
                     n_landmarks += 1
                 else:
                     # found a match
-                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, observation))
+                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, lmark_local_frame))
 
         landmark_measurements = np.array(landmark_measurements)
         return landmark_measurements, n_landmarks

@@ -5,6 +5,7 @@ from scipy.sparse import csr_matrix
 
 from Least_Squares_Solver import Least_Squares_Solver as Solver
 from Landmark_Associator import Landmark_Associator as Associator
+from Pose import Pose
 
 class Factor_Graph_SLAM:
 
@@ -66,20 +67,108 @@ class Factor_Graph_SLAM:
 
         # Build a linear system
         n_poses = len(odom_measurements)+1
-        # n_poses = len(traj_estimate)
-        A, b = self.create_linear_system(odom_measurements, landmark_measurements,
-                                         p0, n_poses, n_landmarks)
+        traj, landmarks = Factor_Graph_SLAM.init_states(p0, odom_measurements, landmark_measurements, n_poses, n_landmarks)
 
-        # Solve with the selected method
-        x, R = Solver.solve(A, b, self.method)
+        print(f"Init states: \n\tTraj: {traj} \n\t lmarks: {landmarks}")
+        # Iterative optimization
+        x = Factor_Graph_SLAM.vectorize_state(traj, landmarks)
+        R = None
+        for i in range(10):
+            A, b = self.create_linear_system(x, odom_measurements, landmark_measurements,
+                                             p0, n_poses, n_landmarks)
+            dx, R = Solver.solve(A, b, self.method)
+            x = x + dx
+
         traj, landmarks = self.devectorize_state(x, n_poses)
         # Store the optimized traj and landmark positions
         self.list_of_trajs.append(traj)
         self.list_of_landmarks.append(landmarks)
 
+        print("\n\nlandmarks returned:\n", landmarks)
         return traj, landmarks, R, A, b
 
-    def create_linear_system(self, odom_measurements, landmark_measurements,
+    @staticmethod
+    def init_states(p0, odoms, observations, n_poses, n_landmarks):
+        '''
+        Initialize the state vector given odometry and observations.
+        '''
+        traj = np.zeros((n_poses, 3))
+        traj[0] = p0
+        landmarks = np.zeros((n_landmarks, 2))
+        landmarks_mask = np.zeros((n_landmarks), dtype=np.bool)
+
+        print(f"obs size: {observations.shape}\t n_landys: {n_landmarks}")
+
+        for i in range(len(odoms)):
+            traj[i + 1, :] = traj[i, :] + odoms[i, :]
+
+        for i in range(len(observations)):
+            pose_idx = int(observations[i, 0])
+            landmark_idx = int(observations[i, 1])
+
+            if not landmarks_mask[landmark_idx]:
+                landmarks_mask[landmark_idx] = True
+
+                pose = traj[pose_idx, :]
+                observation = observations[i, 2:]
+
+                landmarks[landmark_idx,:] = Associator.transform_to_global_frame(observation, pose)
+
+        return traj, landmarks
+
+    @staticmethod
+    def get_meas_jacob_pose(pose, lmark):
+        '''
+        Derivative of measurement function in terms of pose
+
+        \param pose (3,): pose of robot [x,y,theta]
+        \param lmark (2,): position of landmark in space [x,y]
+        \return jacob (2,3): derivatives of measurement in terms of robot pose
+        '''
+
+        rx, ry, r_theta = pose[0], pose[1], pose[2]
+        lx, ly = lmark[0], lmark[1]
+        dx = lx - rx
+        dy = ly - ry
+
+        jacob = np.array([[-np.cos(r_theta), -np.sin(r_theta), -np.sin(r_theta)*dx + np.cos(r_theta)*dy],
+                          [np.sin(r_theta), -np.cos(r_theta), -np.cos(r_theta)*dx - np.sin(r_theta)*dy]])
+
+        return jacob
+
+    @staticmethod
+    def get_meas_jacob_landmark(pose):
+        '''
+        Derivative of measurement function in terms of landmark
+
+        \param pose (3,): pose of robot [x,y,theta]
+        \return jacob (2,2): derivatives of measurement in terms of landmark position
+        '''
+
+        _, _, r_theta = pose[0], pose[1], pose[2]
+
+        jacob = np.array([[np.cos(r_theta), np.sin(r_theta)],
+                          [-np.sin(r_theta), np.cos(r_theta)]])
+
+        return jacob
+
+    def estimate_landmark_measurement(self, pose, global_lmark_pos):
+
+        # print(f"ELM inputs:\t p: {pose}\t glp: {global_lmark_pos}")
+        obs = global_lmark_pos - pose[:self.dimensions]
+        th = pose[2]
+        R = np.array([[np.cos(th), np.sin(th)], [-np.sin(th), np.cos(th)]])
+
+        # just rotation
+        # vehicle_pose = Pose(np.array([0, 0, pose[2]]))
+        # R = vehicle_pose.getTransformationMatrix2D()[:self.dimensions,:self.dimensions]
+
+        # meas_pre_rot = np.array([obs[0], obs[1], 1])
+        measurement = (R @ obs.reshape(self.dimensions,1))
+
+        return measurement
+
+    def create_linear_system(self, x, odom_measurements, landmark_measurements,
                              p0, n_poses, n_landmarks):
         '''
         Creates the linear system to solve the least squares problem, Ax-b=0.
@@ -99,6 +188,7 @@ class Factor_Graph_SLAM:
                 :length of the state vector.
         '''
 
+        # print("STARTING OFF WITH x:\n", x)
         n_odom = len(odom_measurements)
         n_lmark_meas = len(landmark_measurements)
 
@@ -117,6 +207,7 @@ class Factor_Graph_SLAM:
         # Prepare Sigma^{-1/2}.
         sqrt_inv_odom = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_odom))
         sqrt_inv_obs = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_landmark))
+        # TODO: special jacob for pose (angles diff than poses)
 
         # anchor initial state at p0
         A[:pose_dims,:pose_dims] = np.eye(pose_dims)
@@ -144,17 +235,30 @@ class Factor_Graph_SLAM:
             landmark_idx = int(landmark_measurements[meas_idx,1])
             row = pose_dims*(1+n_odom) + self.dimensions*meas_idx
 
-            # I for landmark rows
+            pose = x[pose_dims*pose_idx:pose_dims*(pose_idx+1)]
+
+            # Put Jacobian (d-meas/d-landmark) into landmark rows
+            lmark_jacob = Factor_Graph_SLAM.get_meas_jacob_landmark(pose)
+
             A[row:row+self.dimensions, \
               (pose_dims*n_poses + self.dimensions*landmark_idx):(pose_dims*n_poses + self.dimensions*(landmark_idx+1))] = \
-                                np.eye(self.dimensions) @ sqrt_inv_obs
-            # -I for pose rows
-            A[row:row+self.dimensions, pose_dims*pose_idx:(pose_dims*(pose_idx)+self.dimensions)] = \
-                                -np.eye(self.dimensions) @ sqrt_inv_obs
+                                lmark_jacob @ sqrt_inv_obs
+
+            # Put Jacobian (d-meas/d-pose) into pose rows
+            lmark_x_idx = pose_dims*n_poses + landmark_idx*self.dimensions
+            global_lmark_pos = x[lmark_x_idx:lmark_x_idx+self.dimensions]
+            est_lmark_meas = self.estimate_landmark_measurement(pose, global_lmark_pos).flatten()
+
+            pose_jacob = Factor_Graph_SLAM.get_meas_jacob_pose(pose, global_lmark_pos)
+            A[row:row+self.dimensions, pose_dims*pose_idx:pose_dims*(pose_idx+1)] = \
+                                sqrt_inv_obs @ pose_jacob
+
+            # print(f"uh oh: {landmark_measurements[meas_idx,2:2+self.dimensions].shape}\t {est_lmark_meas.shape}")
             # add measurement to b
             b[row:row+self.dimensions] = \
-                                landmark_measurements[meas_idx,2:2+self.dimensions] @ sqrt_inv_obs
+                                (landmark_measurements[meas_idx,2:2+self.dimensions] - est_lmark_meas) @ sqrt_inv_obs
 
+        print("b vec:\n", b[n_poses*3:])
         return csr_matrix(A), b
 
     '''
