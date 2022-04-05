@@ -79,7 +79,7 @@ class Landmark_Associator:
 
         n_landmarks = len(prev_landmarks)
 
-        print(f"prev landmarks:\n {prev_landmarks}")
+        # print(f"prev landmarks:\n {prev_landmarks}")
 
         landmark_measurements = []
         #CA: Note this will iterate through the poses. We will have an extra landmark for the current step where

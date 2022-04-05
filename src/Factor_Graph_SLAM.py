@@ -58,18 +58,19 @@ class Factor_Graph_SLAM:
             prev_landmarks = []
             traj_estimate = [p0]
 
+        # print("before ass:\n", landmarks)
         # Associate landmark measurements with previously seen landmarks
         landmark_measurements, n_landmarks = Associator.associate_landmarks(prev_landmarks,
                                                                             landmarks,
                                                                             traj_estimate,
                                                                             odom_measurements[-1],
                                                                             self.sigma_landmark)
-
+        # print("after:\n", landmarks)
         # Build a linear system
         n_poses = len(odom_measurements)+1
         traj, landmarks = Factor_Graph_SLAM.init_states(p0, odom_measurements, landmark_measurements, n_poses, n_landmarks)
 
-        print(f"Init states: \n\tTraj: {traj} \n\t lmarks: {landmarks}")
+        # print(f"Init states: \n\tTraj: {traj} \n\t lmarks: {landmarks}")
         # Iterative optimization
         x = Factor_Graph_SLAM.vectorize_state(traj, landmarks)
         R = None
@@ -77,6 +78,7 @@ class Factor_Graph_SLAM:
             A, b = self.create_linear_system(x, odom_measurements, landmark_measurements,
                                              p0, n_poses, n_landmarks)
             dx, R = Solver.solve(A, b, self.method)
+            # print(f"\t iter {i} .. norm: {np.linalg.norm(dx)}")
             x = x + dx
 
         traj, landmarks = self.devectorize_state(x, n_poses)
@@ -84,7 +86,7 @@ class Factor_Graph_SLAM:
         self.list_of_trajs.append(traj)
         self.list_of_landmarks.append(landmarks)
 
-        print("\n\nlandmarks returned:\n", landmarks)
+        # print("\n\nlandmarks returned:\n", landmarks)
         return traj, landmarks, R, A, b
 
     @staticmethod
@@ -97,7 +99,7 @@ class Factor_Graph_SLAM:
         landmarks = np.zeros((n_landmarks, 2))
         landmarks_mask = np.zeros((n_landmarks), dtype=np.bool)
 
-        print(f"obs size: {observations.shape}\t n_landys: {n_landmarks}")
+        # print(f"obs size: {observations.shape}\t n_landys: {n_landmarks}")
 
         for i in range(len(odoms)):
             traj[i + 1, :] = traj[i, :] + odoms[i, :]
@@ -211,7 +213,7 @@ class Factor_Graph_SLAM:
 
         # anchor initial state at p0
         A[:pose_dims,:pose_dims] = np.eye(pose_dims)
-        b[:pose_dims] = p0[:pose_dims]
+        b[:pose_dims] = p0[:pose_dims] - x[:pose_dims]
 
         # Fill in odometry measurements
         for odom_idx in range(n_odom):
@@ -258,7 +260,7 @@ class Factor_Graph_SLAM:
             b[row:row+self.dimensions] = \
                                 (landmark_measurements[meas_idx,2:2+self.dimensions] - est_lmark_meas) @ sqrt_inv_obs
 
-        print("b vec:\n", b[n_poses*3:])
+        # print("b vec:\n", b)
         return csr_matrix(A), b
 
     '''

@@ -51,8 +51,8 @@ if __name__ == "__main__":
                                             p0)
         runtime = time.time() - start_time
         print('Iteration', i, 'took', runtime, 's')
-        if i>0:
-            break
+        SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks)
+
     if args.plot_R and R is not None:
         plt.spy(R)
         plt.show()
