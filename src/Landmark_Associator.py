@@ -89,13 +89,10 @@ class Landmark_Associator:
             # loop through landmark measurements corresponding with pose
             for lmark_local_frame in landmarks:
                 lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
-                # observation = lmark_global_frame - pose[:2]
-                # print(f"\t\t global lmark: {lmark_global_frame}", end="")
 
                 landmark_id = Landmark_Associator.associate_with_prev_landmarks(lmark_global_frame, pose, prev_landmarks)
 
                 if landmark_id == -1: # no match
-                    # print("\tNO MATCH")
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, lmark_local_frame))
                     # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
                     if len(prev_landmarks) > 0:
@@ -104,7 +101,6 @@ class Landmark_Associator:
                         prev_landmarks = lmark_global_frame.reshape(1,2)
                     n_landmarks += 1
                 else:
-                    # print("\t match  ", landmark_id)
                     # found a match
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, lmark_local_frame))
 
