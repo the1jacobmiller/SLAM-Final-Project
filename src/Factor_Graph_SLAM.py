@@ -33,7 +33,7 @@ class Factor_Graph_SLAM:
         else:
             raise NotImplementedError
 
-    def run(self, odom_measurements, landmarks, p0, step_convergence_thresh=1e-10):
+    def run(self, odom_measurements, landmarks, p0, step_convergence_thresh=1e-10, max_iters=10):
         '''
         Solves the factor graph SLAM problem.
 
@@ -45,6 +45,9 @@ class Factor_Graph_SLAM:
         \param p0: the initial pose of the robot
         \param step_convergence_thresh: threshold for breaking out of the
                     optimization loop (compared with norm of dx)
+        \param max_iters: maximum number of steps the algorithm will take by
+                    creating and solving a linear system for state vector
+                    updates (dx)
 
         \return traj: the optimized trajectory that the robot has followed
         \return landmarks: the optimized positions of the landmarks
@@ -74,13 +77,14 @@ class Factor_Graph_SLAM:
         x = Factor_Graph_SLAM.vectorize_state(traj, landmarks)
         R = None
 
-        for i in range(10):
+        for i in range(max_iters):
             A, b = self.create_linear_system(x, odom_measurements, landmark_measurements,
                                              p0, n_poses, n_landmarks)
             dx, R = Solver.solve(A, b, self.method)
             x = x + dx
 
             if np.linalg.norm(dx) < step_convergence_thresh:
+                print(f"\tHit convergence threshold! Iters: {i}  (final dx norm: {np.linalg.norm(dx):.4E})")
                 break
 
         traj, landmarks = self.devectorize_state(x, n_poses)
