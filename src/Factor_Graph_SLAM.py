@@ -14,12 +14,14 @@ class Factor_Graph_SLAM:
     list_of_trajs = [] # stores the optimized traj for each frame
     list_of_landmarks = [] # stores the optimized landmark positions for each frame
 
-    def __init__(self, method, dimensions=2):
+    def __init__(self, method, dimensions=2, sigma_odom=10.0, sigma_landmark=0.1):
         '''
         \param method: the method to be used to solve the least squares
         optimization problem
         \param dimensions: number of pose/landmark dimensions to use when
                            solving SLAM problem
+        \param sigma_odom: standard deviation of odometry measurements
+        \param sigma_landmark: standard deviation of landmark measurements
         '''
         self.method = method
 
@@ -28,8 +30,13 @@ class Factor_Graph_SLAM:
 
         # Uncertainty Values (maybe TODO - shouldn't just be ones)
         if self.dimensions == 2:
-            self.sigma_odom = np.eye(self.dimensions+1)
-            self.sigma_landmark = np.eye(self.dimensions)
+            # divide last element by 10 because it corresponds to theta [radians]
+            # not a position in meters; small changes will have more significant
+            # impace on performance, also measurements should be more accurate
+            self.sigma_odom = np.diag([sigma_odom, sigma_odom, sigma_odom/10.0])
+            # we are super uncertain about initial pose
+            self.sigma_init_pose = 1e5 * self.sigma_odom
+            self.sigma_landmark = np.diag([sigma_landmark, sigma_landmark])
         else:
             raise NotImplementedError
 
@@ -86,6 +93,9 @@ class Factor_Graph_SLAM:
             if np.linalg.norm(dx) < step_convergence_thresh:
                 print(f"\tHit convergence threshold! Iters: {i}  (final dx norm: {np.linalg.norm(dx):.4E})")
                 break
+            elif i+1 == max_iters:
+                print(f"\tHit iteration limit! Iters: {i+1}  (final dx norm: {np.linalg.norm(dx):.4E})")
+
 
         traj, landmarks = self.devectorize_state(x, n_poses)
         # Store the optimized traj and landmark positions
@@ -93,17 +103,6 @@ class Factor_Graph_SLAM:
         self.list_of_landmarks.append(landmarks)
 
         return traj, landmarks, R, A, b
-
-    def odometry_estimation(x, i, pose_dim):
-        '''
-        \param x: State vector containing both the pose and landmarks
-        \param i: Index of the pose to start from (odometry between pose i and i+1)
-        \param pose_dim: Number of elements in each pose
-        \return odom Odometry (\Delta x, \Delta y) in the shape (2, )
-        '''
-        odom = x[pose_dim*(i+1):pose_dim*(i+2)] - x[pose_dim*i:pose_dim*(i+1)]
-
-        return odom
 
     def create_linear_system(self, x, odom_measurements, landmark_measurements,
                              p0, n_poses, n_landmarks):
@@ -131,9 +130,10 @@ class Factor_Graph_SLAM:
         n_odom = len(odom_measurements)
         n_lmark_meas = len(landmark_measurements)
 
+        # how many elements are in a pose
         pose_dims = 0
         if self.dimensions == 2:
-            pose_dims = 3 # dims are x,y,theta
+            pose_dims = 3 # (x,y,theta)
         elif self.dimensions == 3:
             print("3D NOT IMPLEMENTED IN create_linear_system()!!!")
             raise NotImplementedError
@@ -143,14 +143,15 @@ class Factor_Graph_SLAM:
 
         A = np.zeros((M, N))
         b = np.zeros((M, ))
+
         # Prepare Sigma^{-1/2}.
+        sqrt_init_pose = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_init_pose))
         sqrt_inv_odom = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_odom))
-        sqrt_inv_obs = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_landmark))
-        # TODO: special jacob for pose (angles diff than poses)
+        sqrt_inv_landmark = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_landmark))
 
         # anchor initial state at p0
-        A[:pose_dims,:pose_dims] = np.eye(pose_dims)
-        b[:pose_dims] = p0[:pose_dims] - x[:pose_dims]
+        A[:pose_dims,:pose_dims] = np.eye(pose_dims) @ sqrt_init_pose
+        b[:pose_dims] = (p0[:pose_dims] - x[:pose_dims]) @ sqrt_init_pose
 
         # Fill in odometry measurements
         for odom_idx in range(n_odom):
@@ -183,7 +184,7 @@ class Factor_Graph_SLAM:
 
             A[row:row+self.dimensions, \
               (pose_dims*n_poses + self.dimensions*landmark_idx):(pose_dims*n_poses + self.dimensions*(landmark_idx+1))] = \
-                                lmark_jacob @ sqrt_inv_obs
+                                lmark_jacob @ sqrt_inv_landmark
 
             # Put Jacobian (d-meas/d-pose) into pose rows
             lmark_x_idx = pose_dims*n_poses + landmark_idx*self.dimensions
@@ -191,12 +192,12 @@ class Factor_Graph_SLAM:
 
             pose_jacob = Factor_Graph_SLAM.get_meas_jacob_pose(pose, global_lmark_pos)
             A[row:row+self.dimensions, pose_dims*pose_idx:pose_dims*(pose_idx+1)] = \
-                                sqrt_inv_obs @ pose_jacob
+                                sqrt_inv_landmark @ pose_jacob
 
             # add measurement to b
             est_lmark_meas = Factor_Graph_SLAM.estimate_landmark_measurement(pose, global_lmark_pos).flatten()
             b[row:row+self.dimensions] = \
-                                (landmark_measurements[meas_idx,2:2+self.dimensions] - est_lmark_meas) @ sqrt_inv_obs
+                                (landmark_measurements[meas_idx,2:2+self.dimensions] - est_lmark_meas) @ sqrt_inv_landmark
 
         return csr_matrix(A), b
 
@@ -212,7 +213,7 @@ class Factor_Graph_SLAM:
         \return traj: trajectory predicted given initial pose and odometry measurements
         '''
         traj = np.zeros((n_poses, 3))
-        traj[0] = p0
+        traj[0] = p0 # trajectory starts at p0
 
         landmarks = np.zeros((n_landmarks, 2))
         landmarks_mask = np.zeros((n_landmarks), dtype=np.bool)
@@ -224,13 +225,15 @@ class Factor_Graph_SLAM:
             pose_idx = int(observations[i, 0])
             landmark_idx = int(observations[i, 1])
 
+            # if we haven't estiamted this landmarks global pos yet
             if not landmarks_mask[landmark_idx]:
-                landmarks_mask[landmark_idx] = True
 
                 pose = traj[pose_idx, :]
                 observation = observations[i, 2:]
 
                 landmarks[landmark_idx,:] = Associator.transform_to_global_frame(observation, pose)
+
+                landmarks_mask[landmark_idx] = True # we have an estimate for this landmark's global position
 
         return traj, landmarks
 
@@ -271,6 +274,18 @@ class Factor_Graph_SLAM:
         return jacob
 
     @staticmethod
+    def odometry_estimation(x, i, pose_dim):
+        '''
+        \param x: State vector containing both the pose and landmarks
+        \param i: Index of the pose to start from (odometry between pose i and i+1)
+        \param pose_dim: Number of elements in each pose
+        \return odom Odometry (\Delta x, \Delta y) in the shape (2, )
+        '''
+        odom = x[pose_dim*(i+1):pose_dim*(i+2)] - x[pose_dim*i:pose_dim*(i+1)]
+
+        return odom
+
+    @staticmethod
     def estimate_landmark_measurement(pose, global_lmark_pos):
         '''
         Estimate a landmark measurement given the current estimate for the global
@@ -286,7 +301,7 @@ class Factor_Graph_SLAM:
 
         # rotate observation into robot frame
         vehicle_pose = Pose(pose)
-        R = vehicle_pose.getRotationMatrix()[:2,:2]
+        R = vehicle_pose.getRotationMatrix2D()
         measurement = (R.T @ obs.reshape(dims,1))
 
         return measurement

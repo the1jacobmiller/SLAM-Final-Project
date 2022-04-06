@@ -92,7 +92,8 @@ class Landmark_Associator:
 
                 landmark_id = Landmark_Associator.associate_with_prev_landmarks(lmark_global_frame, pose, prev_landmarks)
 
-                if landmark_id == -1: # no match
+                if landmark_id == -1:
+                    # no match
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, lmark_local_frame))
                     # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
                     if len(prev_landmarks) > 0:
