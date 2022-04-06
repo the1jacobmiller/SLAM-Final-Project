@@ -35,12 +35,12 @@ class Factor_Graph_SLAM:
             # impace on performance, also measurements should be more accurate
             self.sigma_odom = np.diag([sigma_odom, sigma_odom, sigma_odom/10.0])
             # we are super uncertain about initial pose
-            self.sigma_init_pose = 1e5 * self.sigma_odom
+            self.sigma_init_pose = 100 * self.sigma_odom
             self.sigma_landmark = np.diag([sigma_landmark, sigma_landmark])
         else:
             raise NotImplementedError
 
-    def run(self, odom_measurements, landmarks, p0, step_convergence_thresh=1e-10, max_iters=10):
+    def run(self, odom_measurements, landmarks, p0, step_convergence_thresh=1e-5, max_iters=10):
         '''
         Solves the factor graph SLAM problem.
 
