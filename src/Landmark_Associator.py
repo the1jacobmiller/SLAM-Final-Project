@@ -37,16 +37,22 @@ class Landmark_Associator:
         return landmark_global_pos
 
     @staticmethod
-    def associate_with_prev_landmarks(observation, pose, prev_landmarks):
+    def associate_with_global_landmarks(observation, global_landmarks):
         # TODO: TUNE ME
         association_thresh = 2.0 # tuned for euclidean dist with no p0 noise
 
-        for prev_landmark_id in range(len(prev_landmarks)):
-            prev_landmark = prev_landmarks[prev_landmark_id]
-            dist = Landmark_Associator.get_euclidean_distance(prev_landmark, observation)
+        min_dist = np.inf
+        closest_idx = -1
+        for idx in range(len(global_landmarks)):
+            global_landmark = global_landmarks[idx][0:2]
+            dist = Landmark_Associator.get_euclidean_distance(global_landmark, observation)
 
-            if dist < association_thresh:
-                return prev_landmark_id
+            if dist < min_dist:
+                closest_idx = idx
+                min_dist = dist
+
+        if min_dist < association_thresh:
+            return closest_idx
         return -1
 
     @staticmethod
@@ -77,33 +83,55 @@ class Landmark_Associator:
         \return n_landmarks: the number of unique landmarks
         '''
 
-        n_landmarks = len(prev_landmarks)
+        n_landmarks = 0
+        global_landmarks = np.hstack((prev_landmarks, -np.ones((len(prev_landmarks)))))
 
         landmark_measurements = []
+
+        # TODO: only match with closest prev_landmark
+        #     : only allow each prev_landmark to have one match per frame in the trajectory
+        #     : remove any prev_landmarks that have not been matched with new landmarks
+        #     : associate landmarks from newest measurement?
 
         # iterate through poses in trajectory
         for pose_id in range(len(traj_estimate)):
             pose = traj_estimate[pose_id]
             landmarks = new_landmarks[pose_id]
 
+            # Keeps track of global landmark ids already associated with this
+            # pose.
+            matched_lmark_ids = []
+
             # loop through landmark measurements corresponding with pose
             for lmark_local_frame in landmarks:
                 lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
+                landmark_idx = Landmark_Associator.associate_with_global_landmarks(lmark_global_frame, global_landmarks)
 
-                landmark_id = Landmark_Associator.associate_with_prev_landmarks(lmark_global_frame, pose, prev_landmarks)
-
-                if landmark_id == -1:
-                    # no match
-                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, lmark_local_frame))
-                    # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
-                    if len(prev_landmarks) > 0:
-                        prev_landmarks = np.vstack([prev_landmarks, lmark_global_frame])
-                    else:
-                        prev_landmarks = lmark_global_frame.reshape(1,2)
+                if landmark_idx == -1:
+                    # no match - assign a new id to this landmark
+                    new_global_landmark = np.array([lmark_global_frame[0], lmark_global_frame[1], n_landmarks]).reshape((1,3))
                     n_landmarks += 1
+
+                    # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
+                    if len(global_landmarks) > 0:
+                        global_landmarks = np.vstack([global_landmarks, new_global_landmark])
+                    else:
+                        global_landmarks = new_global_landmark
+
+                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, new_global_landmark[0,2], lmark_local_frame))
+                    matched_lmark_ids.append(new_global_landmark[0,2])
+
                 else:
                     # found a match
-                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, landmark_id, lmark_local_frame))
+                    if global_landmarks[landmark_idx,2] == -1:
+                        # We haven't seen this landmark yet in this iteration.
+                        # Assign this global landmark an id
+                        global_landmarks[landmark_idx,2] = n_landmarks
+                        n_landmarks += 1
+
+                    if global_landmarks[landmark_idx,2] not in matched_lmark_ids:
+                        landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, global_landmarks[landmark_idx,2], lmark_local_frame))
+                        matched_lmark_ids.append(global_landmarks[landmark_idx,2])
 
         landmark_measurements = np.array(landmark_measurements)
         return landmark_measurements, n_landmarks

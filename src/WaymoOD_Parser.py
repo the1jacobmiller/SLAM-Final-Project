@@ -14,8 +14,8 @@ from waymo_open_dataset import dataset_pb2 as open_dataset
 class WaymoOD_Parser:
     # Tune/change these
     p0_noise = [1.0, 1.0, 0.1] # std dev of x,y,theta
-    odom_noise = [0.1, 0.1, 0.01] # std dev of x,y,theta
-    landmark_noise = [0.01, 0.01] # std dev of x,y
+    odom_noise = [0.0, 0.0, 0.00] # std dev of x,y,theta
+    landmark_noise = [0.0, 0.0] # std dev of x,y
 
     @staticmethod
     def parse(file, max_frames=np.inf):
