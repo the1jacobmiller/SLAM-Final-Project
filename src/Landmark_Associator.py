@@ -39,7 +39,7 @@ class Landmark_Associator:
     @staticmethod
     def associate_with_prev_landmarks(observation, pose, prev_landmarks):
         # TODO: TUNE ME
-        association_thresh = 1.0 # tuned for euclidean dist with no p0 noise
+        association_thresh = 2.0 # tuned for euclidean dist with no p0 noise
 
         for prev_landmark_id in range(len(prev_landmarks)):
             prev_landmark = prev_landmarks[prev_landmark_id]

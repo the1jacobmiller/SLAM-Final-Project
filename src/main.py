@@ -6,10 +6,6 @@ import time
 from WaymoOD_Parser import WaymoOD_Parser
 from Factor_Graph_SLAM import Factor_Graph_SLAM
 
-# TODO: tune me
-sigma_p0_pos = 2.0
-sigma_p0_angle = 0.1
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('data', help='path to tfrecord file')
@@ -19,6 +15,8 @@ if __name__ == "__main__":
         help='choices are default, pinv, qr, lu, qr_colamd, lu_colamd')
     parser.add_argument('--n_dims', type=int, default=2,
         help='[int] number of pose/landmark dimensions to use for SLAM')
+    parser.add_argument('--n_frames', default=np.inf,
+        help='[int] number of frames to process for SLAM')
     parser.add_argument('--plot_R', action='store_true')
     parser.add_argument('--plot_traj_and_landmarks', action='store_true')
     args = parser.parse_args()
@@ -28,7 +26,9 @@ if __name__ == "__main__":
 
     # Parse the data to retrieve odom and landmark measurements for all frames
     # along with the ground truth trajctory and landmarks.
-    odom_measurements, landmark_measurements, gt_traj, gt_landmarks = WaymoOD_Parser.parse(args.data)
+    p0, odom_measurements, landmark_measurements,\
+        gt_traj, gt_landmarks = WaymoOD_Parser.parse(args.data,
+                                                     max_frames=float(args.n_frames))
     n_frames = len(gt_traj)
 
     # Make sure the data is of the correct type and shape
@@ -38,8 +38,6 @@ if __name__ == "__main__":
     assert gt_landmarks.shape[1] == 2
 
     SLAM = Factor_Graph_SLAM(args.method, dimensions=args.n_dims)
-    p0 = gt_traj[0] + np.random.normal(0, sigma_p0_pos)
-    p0[2] = gt_traj[0][2] + np.random.normal(0, sigma_p0_angle)
 
     traj, landmarks, R = None, None, None
     for i in range(1,n_frames):

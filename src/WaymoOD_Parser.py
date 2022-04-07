@@ -12,6 +12,10 @@ from waymo_open_dataset.utils import  frame_utils
 from waymo_open_dataset import dataset_pb2 as open_dataset
 
 class WaymoOD_Parser:
+    # Tune/change these
+    p0_noise = [1.0, 1.0, 0.1] # std dev of x,y,theta
+    odom_noise = [0.1, 0.1, 0.01] # std dev of x,y,theta
+    landmark_noise = [0.01, 0.01] # std dev of x,y
 
     @staticmethod
     def parse(file, max_frames=np.inf):
@@ -55,8 +59,9 @@ class WaymoOD_Parser:
                 break
 
         gt_landmarks = WaymoOD_Parser.getGroundTruthLandmarks(gt_traj, labeled_landmarks)
+        p0 = np.asarray(gt_traj[0]) + np.random.normal([0.,0.,0.], WaymoOD_Parser.p0_noise)
 
-        return np.asarray(odom_measurements), landmarks, np.asarray(gt_traj), np.asarray(gt_landmarks)
+        return p0, np.asarray(odom_measurements), landmarks, np.asarray(gt_traj), np.asarray(gt_landmarks)
 
     @staticmethod
     def getOdomMeasurement(frame, prev_frame):
@@ -66,7 +71,10 @@ class WaymoOD_Parser:
         delta_pose = pose_t1 - pose_t0
         delta_pose[2] = WaymoOD_Parser.warp2pi(delta_pose[2])
 
-        return delta_pose
+        # Add noise to the measurement
+        odom = np.asarray(delta_pose) + np.random.normal([0.,0.,0.], WaymoOD_Parser.odom_noise)
+
+        return odom
 
     @staticmethod
     def getLandmarks(frame):
@@ -83,7 +91,13 @@ class WaymoOD_Parser:
 
         for laser_label in frame.laser_labels:
             if laser_label.type == laser_label.TYPE_SIGN:
-                landmark_rel_pos = np.array([laser_label.box.center_x, laser_label.box.center_y])
+                landmark_rel_pos = np.array([laser_label.box.center_x,
+                                             laser_label.box.center_y])
+
+                # Add noise to the measurement
+                landmark_rel_pos = landmark_rel_pos + \
+                                   np.random.normal([0.,0.], WaymoOD_Parser.landmark_noise)
+
                 landmarks.append(landmark_rel_pos)
 
         return landmarks
