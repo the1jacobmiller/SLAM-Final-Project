@@ -40,11 +40,14 @@ if __name__ == "__main__":
     SLAM = Factor_Graph_SLAM(args.method, dimensions=args.n_dims)
 
     traj, landmarks, R = None, None, None
-    for i in range(1,n_frames):
+    for i in range(2,n_frames):
         start_time = time.time()
 
         # Solve the factor graph SLAM problem with frames 0 to i
-        traj, landmarks, R, A, b = SLAM.run(odom_measurements[:i],
+        # Note: there are landmark measurements at p0, but the first odom
+        # measurement is between p0 and p1. Because of this, there should be
+        # row in odom_measurements than landmark_measurements.
+        traj, landmarks, R, A, b = SLAM.run(odom_measurements[:i-1],
                                             landmark_measurements[:i],
                                             p0)
         runtime = time.time() - start_time

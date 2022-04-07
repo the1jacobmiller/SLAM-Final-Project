@@ -16,7 +16,7 @@ class Factor_Graph_SLAM:
 
     # Tune these variables
     sigma_p0 = [1.0, 1.0, 0.1] # x,y,theta
-    sigma_odom = [0.0, 0.0, 0.00] # x,y,theta
+    sigma_odom = [0.1, 0.1, 0.01] # x,y,theta
     sigma_landmark = [0.01, 0.01] # x,y
 
     def __init__(self, method, dimensions=2):
@@ -74,6 +74,8 @@ class Factor_Graph_SLAM:
         else:
             prev_landmarks = []
             traj_estimate = [p0]
+
+        assert len(odom_measurements)+1 == len(landmarks)
 
         # Associate landmark measurements with previously seen landmarks
         landmark_measurements, n_landmarks = Associator.associate_landmarks(prev_landmarks,
