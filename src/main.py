@@ -47,9 +47,9 @@ if __name__ == "__main__":
         # Note: there are landmark measurements at p0, but the first odom
         # measurement is between p0 and p1. Because of this, there should be
         # row in odom_measurements than landmark_measurements.
-        traj, landmarks, R, A, b = SLAM.run(odom_measurements[:i-1],
-                                            landmark_measurements[:i],
-                                            p0)
+        traj, landmarks, R, A, b, init_traj = SLAM.run(odom_measurements[:i-1],
+                                                       landmark_measurements[:i],
+                                                       p0)
         runtime = time.time() - start_time
         print('Iteration', i, 'took', runtime, 's')
         # SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks, p_init=p0)
@@ -61,4 +61,4 @@ if __name__ == "__main__":
     # Visualize the final result
     # TODO: add this conditional back in, just removed for debugging
     # if args.plot_traj_and_landmarks:
-    SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks, p_init=p0)
+    SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks, init_traj, p_init=p0)
