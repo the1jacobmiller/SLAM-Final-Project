@@ -130,11 +130,6 @@ class Landmark_Associator:
         if len(prev_landmarks) > 0:
             global_landmarks = np.hstack((prev_landmarks, -np.ones((len(prev_landmarks),1))))
 
-        # TODO: only match with closest prev_landmark
-        #     : only allow each prev_landmark to have one match per frame in the trajectory
-        #     : remove any prev_landmarks that have not been matched with new landmarks
-        #     : associate landmarks from newest measurement?
-
         # iterate through poses in trajectory
         for pose_id in range(len(traj_estimate)):
             pose = traj_estimate[pose_id]
