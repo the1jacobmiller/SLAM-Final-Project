@@ -338,7 +338,8 @@ class Factor_Graph_SLAM:
         Rewritten in Python by Wei Dong (weidong@andrew.cmu.edu), 2021
     '''
     @staticmethod
-    def plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks, init_traj, p_init=None):
+    def plot_traj_and_landmarks(traj, landmarks, gps, gt_traj, gt_landmarks,
+                                init_traj, p_init=None):
         plt.plot(gt_traj[:, 0], gt_traj[:, 1], 'b-', label='gt poses')
         plt.scatter(gt_landmarks[:, 0],
                     gt_landmarks[:, 1],
@@ -353,6 +354,14 @@ class Factor_Graph_SLAM:
                         facecolors='orange',
                         edgecolors='g',
                         label='p0')
+
+        plt.scatter(gps[:, 1],
+                    gps[:, 2],
+                    s=30,
+                    facecolors='purple',
+                    edgecolors='purple',
+                    label='gps')
+
         plt.plot(traj[:, 0], traj[:, 1], 'r-', label='poses')
         plt.scatter(landmarks[:, 0],
                     landmarks[:, 1],
