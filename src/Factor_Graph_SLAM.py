@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.linalg
 from scipy.sparse import csr_matrix
+import copy
 
 from Least_Squares_Solver import Least_Squares_Solver as Solver
 from Landmark_Associator import Landmark_Associator as Associator
@@ -14,7 +15,12 @@ class Factor_Graph_SLAM:
     list_of_trajs = [] # stores the optimized traj for each frame
     list_of_landmarks = [] # stores the optimized landmark positions for each frame
 
-    def __init__(self, method, dimensions=2, sigma_odom=10.0, sigma_landmark=0.1):
+    # Tune these variables
+    sigma_p0 = [1.0, 1.0, 0.1] # x,y,theta
+    sigma_odom = [0.1**2, 0.1**2, (np.pi/180.)**2] # x,y,theta
+    sigma_landmark = [0.01**2, 0.01**2] # x,y
+
+    def __init__(self, method, dimensions=2):
         '''
         \param method: the method to be used to solve the least squares
         optimization problem
@@ -33,10 +39,10 @@ class Factor_Graph_SLAM:
             # divide last element by 10 because it corresponds to theta [radians]
             # not a position in meters; small changes will have more significant
             # impace on performance, also measurements should be more accurate
-            self.sigma_odom = np.diag([sigma_odom, sigma_odom, sigma_odom/10.0])
+            self.sigma_odom = np.diag(Factor_Graph_SLAM.sigma_odom)
             # we are super uncertain about initial pose
-            self.sigma_init_pose = 100 * self.sigma_odom
-            self.sigma_landmark = np.diag([sigma_landmark, sigma_landmark])
+            self.sigma_init_pose = np.diag(Factor_Graph_SLAM.sigma_p0)
+            self.sigma_landmark = np.diag(Factor_Graph_SLAM.sigma_landmark)
         else:
             raise NotImplementedError
 
@@ -70,6 +76,8 @@ class Factor_Graph_SLAM:
             prev_landmarks = []
             traj_estimate = [p0]
 
+        assert len(odom_measurements)+1 == len(landmarks)
+
         # Associate landmark measurements with previously seen landmarks
         landmark_measurements, n_landmarks = Associator.associate_landmarks(prev_landmarks,
                                                                             landmarks,
@@ -79,6 +87,7 @@ class Factor_Graph_SLAM:
         # Build a linear system
         n_poses = len(odom_measurements)+1
         traj, landmarks = Factor_Graph_SLAM.init_states(p0, odom_measurements, landmark_measurements, n_poses, n_landmarks)
+        init_traj = copy.deepcopy(traj)
 
         # Iterative optimization
         x = Factor_Graph_SLAM.vectorize_state(traj, landmarks)
@@ -102,7 +111,7 @@ class Factor_Graph_SLAM:
         self.list_of_trajs.append(traj)
         self.list_of_landmarks.append(landmarks)
 
-        return traj, landmarks, R, A, b
+        return traj, landmarks, R, A, b, init_traj
 
     def create_linear_system(self, x, odom_measurements, landmark_measurements,
                              p0, n_poses, n_landmarks):
@@ -329,7 +338,7 @@ class Factor_Graph_SLAM:
         Rewritten in Python by Wei Dong (weidong@andrew.cmu.edu), 2021
     '''
     @staticmethod
-    def plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks, p_init=None):
+    def plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks, init_traj, p_init=None):
         plt.plot(gt_traj[:, 0], gt_traj[:, 1], 'b-', label='gt poses')
         plt.scatter(gt_landmarks[:, 0],
                     gt_landmarks[:, 1],
@@ -351,5 +360,8 @@ class Factor_Graph_SLAM:
                     facecolors='none',
                     edgecolors='r',
                     label='landmarks')
+
+        plt.plot(init_traj[:, 0], init_traj[:, 1], 'g-', label='dead-reckoning')
+
         plt.legend()
         plt.show()
