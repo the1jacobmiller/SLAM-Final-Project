@@ -43,12 +43,16 @@ if __name__ == "__main__":
     for i in range(2,n_frames):
         start_time = time.time()
 
+        # only want GPS data up until current frame
+        gps_indices = np.where(gps_measurements[:,0] <= i)[0]
+
         # Solve the factor graph SLAM problem with frames 0 to i
         # Note: there are landmark measurements at p0, but the first odom
         # measurement is between p0 and p1. Because of this, there should be
         # row in odom_measurements than landmark_measurements.
         traj, landmarks, R, A, b, init_traj = SLAM.run(odom_measurements[:i-1],
                                                        landmark_measurements[:i],
+                                                       gps_measurements[gps_indices,:],
                                                        p0)
         runtime = time.time() - start_time
         print('Iteration', i, 'took', runtime, 's')

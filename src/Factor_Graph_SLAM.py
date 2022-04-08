@@ -16,7 +16,7 @@ class Factor_Graph_SLAM:
     list_of_landmarks = [] # stores the optimized landmark positions for each frame
 
     # Tune these variables
-    sigma_p0 = [1.0, 1.0, 0.1] # x,y,theta
+    sigma_gps = [30.0, 30.0] # x,y
     sigma_odom = [0.1**2, 0.1**2, (np.pi/180.)**2] # x,y,theta
     sigma_landmark = [0.01**2, 0.01**2] # x,y
 
@@ -34,19 +34,14 @@ class Factor_Graph_SLAM:
         assert(isinstance(dimensions, int))
         self.dimensions = dimensions
 
-        # Uncertainty Values (maybe TODO - shouldn't just be ones)
         if self.dimensions == 2:
-            # divide last element by 10 because it corresponds to theta [radians]
-            # not a position in meters; small changes will have more significant
-            # impace on performance, also measurements should be more accurate
             self.sigma_odom = np.diag(Factor_Graph_SLAM.sigma_odom)
-            # we are super uncertain about initial pose
-            self.sigma_init_pose = np.diag(Factor_Graph_SLAM.sigma_p0)
+            self.sigma_gps_pose = np.diag(Factor_Graph_SLAM.sigma_gps)
             self.sigma_landmark = np.diag(Factor_Graph_SLAM.sigma_landmark)
         else:
             raise NotImplementedError
 
-    def run(self, odom_measurements, landmarks, p0, step_convergence_thresh=1e-5, max_iters=10):
+    def run(self, odom_measurements, landmarks, gps_measurements, p0, step_convergence_thresh=1e-5, max_iters=10):
         '''
         Solves the factor graph SLAM problem.
 
@@ -55,6 +50,7 @@ class Factor_Graph_SLAM:
         \param landmarks: [distance_x, distance_y] of the landmark to the robot
         for each landmark in a given frame. Each row of the list corresponds to
         a single frame. A given frame may have 0 or multiple landmarks
+        \param gps_measurements:
         \param p0: the initial pose of the robot
         \param step_convergence_thresh: threshold for breaking out of the
                     optimization loop (compared with norm of dx)
@@ -94,7 +90,7 @@ class Factor_Graph_SLAM:
         R = None
 
         for i in range(max_iters):
-            A, b = self.create_linear_system(x, odom_measurements, landmark_measurements,
+            A, b = self.create_linear_system(x, odom_measurements, landmark_measurements, gps_measurements,
                                              p0, n_poses, n_landmarks)
             dx, R = Solver.solve(A, b, self.method)
             x = x + dx
@@ -114,7 +110,7 @@ class Factor_Graph_SLAM:
         return traj, landmarks, R, A, b, init_traj
 
     def create_linear_system(self, x, odom_measurements, landmark_measurements,
-                             p0, n_poses, n_landmarks):
+                             gps_measurements, p0, n_poses, n_landmarks):
         '''
         Creates the linear system to solve the least squares problem, Ax-b=0.
 
@@ -124,6 +120,7 @@ class Factor_Graph_SLAM:
         \param landmark_measurements: Landmark measurements between pose i and
                 landmark j in the global coordinate system.
                 Shape: (n_lmark_meas, 2+self.dimensions).
+        \param gps_measurements:
         \param p0: the initial pose of the robot
         \param n_poses: the number of poses in the state vector
         \param n_landmarks: the number of landmarks in the state vector
@@ -138,6 +135,7 @@ class Factor_Graph_SLAM:
 
         n_odom = len(odom_measurements)
         n_lmark_meas = len(landmark_measurements)
+        n_gps = len(gps_measurements)
 
         # how many elements are in a pose
         pose_dims = 0
@@ -147,32 +145,39 @@ class Factor_Graph_SLAM:
             print("3D NOT IMPLEMENTED IN create_linear_system()!!!")
             raise NotImplementedError
 
-        M = (n_odom + 1) * (pose_dims) + n_lmark_meas * (self.dimensions)
+        M = n_gps * self.dimensions + n_odom * pose_dims + n_lmark_meas * self.dimensions
         N = n_poses * (pose_dims) + n_landmarks * (self.dimensions)
 
         A = np.zeros((M, N))
         b = np.zeros((M, ))
 
         # Prepare Sigma^{-1/2}.
-        sqrt_init_pose = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_init_pose))
+        sqrt_gps_pose = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_gps_pose))
         sqrt_inv_odom = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_odom))
         sqrt_inv_landmark = np.linalg.inv(scipy.linalg.sqrtm(self.sigma_landmark))
 
+        # apply GPS measurements
+        for gps_idx in range(n_gps):
+            pose_idx = int(gps_measurements[gps_idx][0])
+            A[self.dimensions*gps_idx:self.dimensions*(gps_idx+1), pose_dims*pose_idx:pose_dims*pose_idx + self.dimensions] = \
+                        np.eye(self.dimensions) @ sqrt_gps_pose
+            gps_pose = gps_measurements[gps_idx][1:]
+            pose = x[pose_dims*pose_idx:pose_dims*(pose_idx+1)]
+            b[self.dimensions*gps_idx:self.dimensions*(gps_idx+1)] = (gps_pose[:self.dimensions] - pose[:self.dimensions]) @ sqrt_gps_pose
         # anchor initial state at p0
-        A[:pose_dims,:pose_dims] = np.eye(pose_dims) @ sqrt_init_pose
-        b[:pose_dims] = (p0[:pose_dims] - x[:pose_dims]) @ sqrt_init_pose
+        # A[:pose_dims,:pose_dims] = np.eye(pose_dims) @ sqrt_gps_pose
+        # b[:pose_dims] = (p0[:pose_dims] - x[:pose_dims]) @ sqrt_gps_pose
 
         # Fill in odometry measurements
         for odom_idx in range(n_odom):
             col = odom_idx*pose_dims
-            row = pose_dims + col # add space from anchoring initial point
+            row = col + n_gps*self.dimensions # add space from anchoring gps points
 
             # -I for current pose rows
             A[row:row+pose_dims, col:col+pose_dims] = \
                                 -np.eye(pose_dims) @ sqrt_inv_odom
             # I for next pose rows
-            A[row:row+pose_dims, \
-              col+pose_dims:col+2*pose_dims] = \
+            A[row:row+pose_dims, col+pose_dims:col+2*pose_dims] = \
                                 np.eye(pose_dims) @ sqrt_inv_odom
 
             # add odom measurement to b
@@ -184,10 +189,10 @@ class Factor_Graph_SLAM:
         for meas_idx in range(n_lmark_meas):
             pose_idx = int(landmark_measurements[meas_idx,0])
             landmark_idx = int(landmark_measurements[meas_idx,1])
-            row = pose_dims*(1+n_odom) + self.dimensions*meas_idx
+            row = self.dimensions*n_gps + pose_dims*n_odom + self.dimensions*meas_idx
 
-            pose = x[pose_dims*pose_idx:pose_dims*(pose_idx+1)]
-
+            x_vec_pose_row = pose_dims*pose_idx
+            pose = x[x_vec_pose_row:x_vec_pose_row + pose_dims]
             # Put Jacobian (d-meas/d-landmark) into landmark rows
             lmark_jacob = Factor_Graph_SLAM.get_meas_jacob_landmark(pose)
 
