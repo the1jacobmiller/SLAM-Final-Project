@@ -16,7 +16,7 @@ class Factor_Graph_SLAM:
     list_of_landmarks = [] # stores the optimized landmark positions for each frame
 
     # Tune these variables
-    sigma_gps = [30.0, 30.0] # x,y
+    sigma_gps = [1.0, 1.0] # x,y
     sigma_odom = [0.1**2, 0.1**2, (np.pi/180.)**2] # x,y,theta
     sigma_landmark = [0.01**2, 0.01**2] # x,y
 
@@ -158,11 +158,17 @@ class Factor_Graph_SLAM:
 
         # apply GPS measurements
         for gps_idx in range(n_gps):
+            # if gps_idx == 0:
+            #     # use p0 instead
+            #     gps_pose = p0
+            # else:
+            #     gps_pose = gps_measurements[gps_idx][1:]
+            gps_pose = gps_measurements[gps_idx][1:]
+
             pose_idx = int(gps_measurements[gps_idx][0])
+            pose = x[pose_dims*pose_idx:pose_dims*(pose_idx+1)]
             A[self.dimensions*gps_idx:self.dimensions*(gps_idx+1), pose_dims*pose_idx:pose_dims*pose_idx + self.dimensions] = \
                         np.eye(self.dimensions) @ sqrt_gps_pose
-            gps_pose = gps_measurements[gps_idx][1:]
-            pose = x[pose_dims*pose_idx:pose_dims*(pose_idx+1)]
             b[self.dimensions*gps_idx:self.dimensions*(gps_idx+1)] = (gps_pose[:self.dimensions] - pose[:self.dimensions]) @ sqrt_gps_pose
         # anchor initial state at p0
         # A[:pose_dims,:pose_dims] = np.eye(pose_dims) @ sqrt_gps_pose
