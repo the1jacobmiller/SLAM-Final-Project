@@ -84,6 +84,16 @@ class WaymoOD_Parser:
 
     @staticmethod
     def getOdomMeasurement(frame, prev_frame):
+        '''
+        Gets the difference in poses between frame and prev_frame with Gaussian
+        noise.
+
+        \param frame: the current frame, of type protobuf
+        \param frame: the previous frame, of type protobuf
+
+        \return odom: [dx, dy, dtheta] the difference in poses between frame and
+        prev_frame with Gaussian noise.
+        '''
         pose_t1 = WaymoOD_Parser.getGroundTruthPose2D(frame)
         pose_t0 = WaymoOD_Parser.getGroundTruthPose2D(prev_frame)
 
@@ -97,6 +107,14 @@ class WaymoOD_Parser:
 
     @staticmethod
     def getCroppedBBox(frame, landmark_id, debug=False):
+        '''
+        Gets the cropped bounding box from the image that contains landmark_id.
+
+        \param frame: the frame to retrieve the bbox from, of type protobuf
+        \param landmark_id: the id of the landmark from the lidar label
+
+        \return cropped_image: the cropped bounding box
+        '''
         matched_label = None
         camera_name = None
         for camera_label in frame.projected_lidar_labels:
@@ -126,8 +144,6 @@ class WaymoOD_Parser:
                 yf = min(img.shape[0], yf)
                 x0 = max(0, x0)
                 xf = min(img.shape[1], xf)
-
-
                 cropped_image = img[y0:yf,x0:xf]
 
                 if debug:
@@ -146,11 +162,12 @@ class WaymoOD_Parser:
         '''
         Gets the relative positions of the landmarks in the designated frame.
 
-        \param frame: the frame to retrieve the landmarks from, of type protobuf Frame
+        \param frame: the frame to retrieve the landmarks from, of type protobuf
 
-        \return landmarks: [distance_x, distance_y] of the landmark to the robot
-        for each landmark in a given frame. Each row of the list corresponds to
-        a single frame. A given frame may have 0 or multiple landmarks
+        \return landmarks: [distance_x, distance_y, cropped_bbox] of the
+        landmark to the robot for each landmark in a given frame. Each row of
+        the list corresponds to a single frame. A given frame may have 0 or
+        multiple landmarks
         '''
         landmarks = []
 
