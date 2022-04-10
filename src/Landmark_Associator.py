@@ -1,6 +1,7 @@
 import numpy as np
 from Pose import Pose
 # from src.Pose import Pose
+import cv2 as cv
 
 class Landmark_Associator:
     @staticmethod
@@ -38,22 +39,49 @@ class Landmark_Associator:
 
     @staticmethod
     def associate_with_global_landmarks(observation, global_landmarks):
-        # TODO: TUNE ME
-        association_thresh = 2.0 # tuned for euclidean dist with no p0 noise
+        # Initiate ORB detector
+        orb = cv.ORB_create()
+        association_thresh = 2.0 # tuned p0 noise
 
-        min_dist = np.inf
+        max_num_matches = 0
         closest_idx = -1
+        # find the keypoints and descriptors with ORB
+
+        _, obs_des  = orb.detectAndCompute(observation, None)
+
         for idx in range(len(global_landmarks)):
-            global_landmark = global_landmarks[idx][0:2]
-            dist = Landmark_Associator.get_euclidean_distance(global_landmark, observation)
-
-            if dist < min_dist:
+            # find the keypoints and descriptors with ORB
+            _, landmark_des = orb.detectAndCompute(global_landmarks[idx], None)
+            bf = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
+            # Match descriptors.
+            matches = bf.match(obs_des, landmark_des)
+            # Sort them in the order of their distance.
+            matches = sorted(matches, key=lambda x: x.distance)
+            if len(matches) > max_num_matches:
                 closest_idx = idx
-                min_dist = dist
+                max_num_matches = len(matches)
 
-        if min_dist < association_thresh:
+        if max_num_matches > association_thresh:
             return closest_idx
         return -1
+    # @staticmethod
+    # def associate_with_global_landmarks(observation, global_landmarks):
+    #     # TODO: TUNE ME
+    #     association_thresh = 2.0 # tuned for euclidean dist with no p0 noise
+    #
+    #     min_dist = np.inf
+    #     closest_idx = -1
+    #     for idx in range(len(global_landmarks)):
+    #         global_landmark = global_landmarks[idx][0:2]
+    #         dist = Landmark_Associator.get_euclidean_distance(global_landmark, observation)
+    #
+    #         if dist < min_dist:
+    #             closest_idx = idx
+    #             min_dist = dist
+    #
+    #     if min_dist < association_thresh:
+    #         return closest_idx
+    #     return -1
 
     @staticmethod
     def create_landmark_measurement(pose_id, landmark_id, observation):
@@ -67,8 +95,10 @@ class Landmark_Associator:
 
         # loop through landmark measurements corresponding with pose
         for lmark_local_frame in landmarks:
-            lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
-            landmark_idx = Landmark_Associator.associate_with_global_landmarks(lmark_global_frame, global_landmarks)
+            lmark_rel_pos= lmark_local_frame[0:2]
+            cropped_bbox = lmark_local_frame[2]
+            lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_rel_pos, pose)
+            landmark_idx = Landmark_Associator.associate_with_global_landmarks(cropped_bbox, global_landmarks)
 
             if landmark_idx == -1:
                 # no match - assign a new id to this landmark
