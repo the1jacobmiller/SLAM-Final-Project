@@ -6,6 +6,8 @@ import itertools
 from scipy.spatial.transform import Rotation
 from Pose import Pose
 
+import matplotlib.pyplot as plt
+
 from waymo_open_dataset.utils import range_image_utils
 from waymo_open_dataset.utils import transform_utils
 from waymo_open_dataset.utils import  frame_utils
@@ -16,6 +18,9 @@ class WaymoOD_Parser:
     p0_noise = [0.0, 0.0, 0.0] # std dev of x,y,theta
     odom_noise = [0.1, 0.1, np.pi/180.] # std dev of x,y,theta
     landmark_noise = [0.01, 0.01] # std dev of x,y
+    gps_noise = [1.0, 1.0] # x,y
+    gps_update_freq = 1.0 # Hz
+    bbox_pad = 20 # pixels
 
     @staticmethod
     def parse(file, max_frames=np.inf):
@@ -39,10 +44,12 @@ class WaymoOD_Parser:
         odom_measurements = []
         landmarks = []
         labeled_landmarks = []
+        gps_measurements = []
         gt_traj = []
         gt_landmarks = []
 
         prev_frame = None
+        prev_gps_time = None
         for data in dataset:
             frame = open_dataset.Frame()
             frame.ParseFromString(bytearray(data.numpy()))
@@ -52,7 +59,17 @@ class WaymoOD_Parser:
                                                                            prev_frame))
             landmarks.append(WaymoOD_Parser.getLandmarks(frame))
             labeled_landmarks.append(WaymoOD_Parser.getLabeledLandmarks(frame))
-            gt_traj.append(WaymoOD_Parser.getGroundTruthPose2D(frame))
+
+            gt_pose = WaymoOD_Parser.getGroundTruthPose2D(frame)
+            gt_traj.append(gt_pose)
+
+            frame_time = frame.timestamp_micros/1e6
+            if prev_gps_time is None or \
+               frame_time - prev_gps_time >= (1./WaymoOD_Parser.gps_update_freq):
+                pose_id = len(gt_traj)-1
+                gps_position = gt_pose[:2] + np.random.normal([0.,0.], WaymoOD_Parser.gps_noise)
+                gps_measurements.append([pose_id, gps_position[0], gps_position[1]])
+                prev_gps_time = frame_time
 
             prev_frame = frame
             if len(gt_traj) >= max_frames:
@@ -61,10 +78,22 @@ class WaymoOD_Parser:
         gt_landmarks = WaymoOD_Parser.getGroundTruthLandmarks(gt_traj, labeled_landmarks)
         p0 = np.asarray(gt_traj[0]) + np.random.normal([0.,0.,0.], WaymoOD_Parser.p0_noise)
 
-        return p0, np.asarray(odom_measurements), landmarks, np.asarray(gt_traj), np.asarray(gt_landmarks)
+        return p0, np.asarray(odom_measurements), landmarks, \
+               np.asarray(gps_measurements), np.asarray(gt_traj), \
+               np.asarray(gt_landmarks)
 
     @staticmethod
     def getOdomMeasurement(frame, prev_frame):
+        '''
+        Gets the difference in poses between frame and prev_frame with Gaussian
+        noise.
+
+        \param frame: the current frame, of type protobuf
+        \param frame: the previous frame, of type protobuf
+
+        \return odom: [dx, dy, dtheta] the difference in poses between frame and
+        prev_frame with Gaussian noise.
+        '''
         pose_t1 = WaymoOD_Parser.getGroundTruthPose2D(frame)
         pose_t0 = WaymoOD_Parser.getGroundTruthPose2D(prev_frame)
 
@@ -77,20 +106,80 @@ class WaymoOD_Parser:
         return odom
 
     @staticmethod
+    def getCroppedBBox(frame, landmark_id, debug=False):
+        '''
+        Gets the cropped bounding box from the image that contains landmark_id.
+
+        \param frame: the frame to retrieve the bbox from, of type protobuf
+        \param landmark_id: the id of the landmark from the lidar label
+
+        \return cropped_image: the cropped bounding box
+        '''
+        matched_label = None
+        camera_name = None
+        for camera_label in frame.projected_lidar_labels:
+            for label in camera_label.labels:
+                if landmark_id in label.id:
+                    # We have a match
+                    matched_label = label
+                    camera_name = camera_label.name
+
+        if matched_label is None:
+            return None
+
+        for camera_image in frame.images:
+            if camera_name == camera_image.name:
+                img = tf.image.decode_jpeg(camera_image.image)
+
+                # Get the bounding box indices
+                width = matched_label.box.width+WaymoOD_Parser.bbox_pad
+                height = matched_label.box.length+WaymoOD_Parser.bbox_pad
+                y0 = int(matched_label.box.center_y - 0.5 * width)
+                yf = int(matched_label.box.center_y + 0.5 * width)
+                x0 = int(matched_label.box.center_x - 0.5 * height)
+                xf = int(matched_label.box.center_x + 0.5 * height)
+
+                # Bound the indices to the size of the image
+                y0 = max(0, y0)
+                yf = min(img.shape[0], yf)
+                x0 = max(0, x0)
+                xf = min(img.shape[1], xf)
+                cropped_image = img[y0:yf,x0:xf]
+
+                if debug:
+                    plt.imshow(img)
+                    plt.show()
+
+                    plt.imshow(cropped_image)
+                    plt.show()
+
+                return cropped_image
+
+        return None
+
+    @staticmethod
     def getLandmarks(frame):
         '''
         Gets the relative positions of the landmarks in the designated frame.
 
-        \param frame: the frame to retrieve the landmarks from, of type protobuf Frame
+        \param frame: the frame to retrieve the landmarks from, of type protobuf
 
-        \return landmarks: [distance_x, distance_y] of the landmark to the robot
-        for each landmark in a given frame. Each row of the list corresponds to
-        a single frame. A given frame may have 0 or multiple landmarks
+        \return landmarks: [distance_x, distance_y, cropped_bbox] of the
+        landmark to the robot for each landmark in a given frame. Each row of
+        the list corresponds to a single frame. A given frame may have 0 or
+        multiple landmarks
         '''
         landmarks = []
 
         for laser_label in frame.laser_labels:
             if laser_label.type == laser_label.TYPE_SIGN:
+                landmark_id = laser_label.id
+                cropped_bbox = WaymoOD_Parser.getCroppedBBox(frame, landmark_id)
+
+                # Don't accept labels that aren't in the camera's FOV
+                if cropped_bbox is None:
+                    continue
+
                 landmark_rel_pos = np.array([laser_label.box.center_x,
                                              laser_label.box.center_y])
 
@@ -98,7 +187,7 @@ class WaymoOD_Parser:
                 landmark_rel_pos = landmark_rel_pos + \
                                    np.random.normal([0.,0.], WaymoOD_Parser.landmark_noise)
 
-                landmarks.append(landmark_rel_pos)
+                landmarks.append([landmark_rel_pos[0], landmark_rel_pos[1], cropped_bbox])
 
         return landmarks
 

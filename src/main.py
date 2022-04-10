@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     # Parse the data to retrieve odom and landmark measurements for all frames
     # along with the ground truth trajctory and landmarks.
-    p0, odom_measurements, landmark_measurements,\
+    p0, odom_measurements, landmark_measurements, gps_measurements, \
         gt_traj, gt_landmarks = WaymoOD_Parser.parse(args.data,
                                                      max_frames=float(args.n_frames))
     n_frames = len(gt_traj)
@@ -61,4 +61,5 @@ if __name__ == "__main__":
     # Visualize the final result
     # TODO: add this conditional back in, just removed for debugging
     # if args.plot_traj_and_landmarks:
-    SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks, init_traj, p_init=p0)
+    SLAM.plot_traj_and_landmarks(traj, landmarks, gps_measurements, gt_traj,
+                                 gt_landmarks, init_traj, p_init=p0)
