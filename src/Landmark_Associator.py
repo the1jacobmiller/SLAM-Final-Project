@@ -50,7 +50,7 @@ class Landmark_Associator:
             return -1
         # Initiate ORB detector
         orb = cv.ORB_create()
-        association_thresh = 20.0 # tuned p0 noise
+        association_thresh = 3.0 # tuned p0 noise
         max_num_matches = 0
         closest_idx = -1
         # find the keypoints and descriptors with ORB
