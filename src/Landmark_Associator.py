@@ -104,9 +104,8 @@ class Landmark_Associator:
         matched_lmark_ids = []
         # loop through landmark measurements corresponding with pose
         for lmark_local_frame in landmarks:
-            lmark_rel_pos = lmark_local_frame[0:2]
             cropped_bbox = lmark_local_frame[2]
-            lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_rel_pos, pose)
+            lmark_global_frame = Landmark_Associator.transform_to_global_frame( lmark_local_frame[0:2], pose)
             landmark_idx = Landmark_Associator.associate_with_global_landmarks_features(cropped_bbox, associated_cropped_bbox)
 
             if landmark_idx == -1:
