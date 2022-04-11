@@ -14,7 +14,7 @@ class Factor_Graph_SLAM:
     method = ''
     list_of_trajs = [] # stores the optimized traj for each frame
     list_of_landmarks = [] # stores the optimized landmark positions for each frame
-
+    associated_cropped_boxes = {} #stores the cropped bounding boxes
     # Tune these variables
     sigma_p0 = [1.0, 1.0, 0.1] # x,y,theta
     sigma_odom = [0.1**2, 0.1**2, (np.pi/180.)**2] # x,y,theta
@@ -79,13 +79,16 @@ class Factor_Graph_SLAM:
         assert len(odom_measurements)+1 == len(landmarks)
 
         # Associate landmark measurements with previously seen landmarks
-        landmark_measurements, n_landmarks = Associator.associate_landmarks(prev_landmarks,
+        landmark_measurements, n_landmarks, self.associated_cropped_boxes = Associator.associate_landmarks(prev_landmarks,
+                                                                            self.associated_cropped_boxes,
                                                                             landmarks,
                                                                             traj_estimate,
                                                                             odom_measurements[-1],
                                                                             self.sigma_landmark)
         # Build a linear system
         n_poses = len(odom_measurements)+1
+        print("landmark_measurements",np.array(landmark_measurements).shape)
+
         traj, landmarks = Factor_Graph_SLAM.init_states(p0, odom_measurements, landmark_measurements, n_poses, n_landmarks)
         init_traj = copy.deepcopy(traj)
 
@@ -107,10 +110,11 @@ class Factor_Graph_SLAM:
 
 
         traj, landmarks = self.devectorize_state(x, n_poses)
+        print("landmarks",np.array(landmarks).shape)
+        print("new_cropped_bb",len(self.associated_cropped_boxes))
         # Store the optimized traj and landmark positions
         self.list_of_trajs.append(traj)
         self.list_of_landmarks.append(landmarks)
-
         return traj, landmarks, R, A, b, init_traj
 
     def create_linear_system(self, x, odom_measurements, landmark_measurements,

@@ -19,6 +19,13 @@ class Landmark_Associator:
     @staticmethod
     def apply_odom_step_2d(odom_measurement, pose):
         return np.array([pose[0] + odom_measurement[0], pose[1] + odom_measurement[1], pose[2] + odom_measurement[2]])
+    @staticmethod
+    def add_new_cropped_bb_to_dict(cropped_bb,landmark_id, associated_cropped_bbox):
+        if landmark_id in associated_cropped_bbox:
+            associated_cropped_bbox[landmark_id].append(cropped_bb)
+        else:
+            associated_cropped_bbox[landmark_id] = [cropped_bb]
+        return associated_cropped_bbox
 
     @staticmethod
     def transform_to_global_frame(observation, pose):
@@ -33,25 +40,30 @@ class Landmark_Associator:
         vehicle_pose = Pose(pose)
         H = vehicle_pose.getTransformationMatrix2D()
         landmark_rel_pos = np.array([observation[0], observation[1], 1])
-
         landmark_global_pos = (H @ landmark_rel_pos)[:2]
         return landmark_global_pos
 
     @staticmethod
-    def associate_with_global_landmarks(observation, global_landmarks):
+    def associate_with_global_landmarks_features(new_cropped_bbox, prev_cropped_bboxes):
+        if len(prev_cropped_bboxes) == 0:
+            return -1
+        print(len(prev_cropped_bboxes))
         # Initiate ORB detector
         orb = cv.ORB_create()
         association_thresh = 2.0 # tuned p0 noise
-
         max_num_matches = 0
         closest_idx = -1
         # find the keypoints and descriptors with ORB
-
-        _, obs_des  = orb.detectAndCompute(observation, None)
-
-        for idx in range(len(global_landmarks)):
+        _, obs_des = orb.detectAndCompute(np.array(new_cropped_bbox), None)
+        if obs_des is None:
+            return -1
+        for idx in range(len(prev_cropped_bboxes)):
+            lmark_cropped_bbox = prev_cropped_bboxes[idx][0]
+            assert(len(np.array(lmark_cropped_bbox).shape) == 3)
             # find the keypoints and descriptors with ORB
-            _, landmark_des = orb.detectAndCompute(global_landmarks[idx], None)
+            _, landmark_des = orb.detectAndCompute(np.array(lmark_cropped_bbox), None)
+            if landmark_des is None:
+                continue
             bf = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
             # Match descriptors.
             matches = bf.match(obs_des, landmark_des)
@@ -85,20 +97,21 @@ class Landmark_Associator:
 
     @staticmethod
     def create_landmark_measurement(pose_id, landmark_id, observation):
-        return np.array([pose_id, landmark_id, observation[0], observation[1]])
+        return np.array([pose_id, landmark_id,  observation[0], observation[1]])
 
     @staticmethod
-    def process_landmarks_at_pose(pose, pose_id, landmarks, landmark_measurements, global_landmarks, n_landmarks):
+    def process_landmarks_at_pose(pose, pose_id, landmarks, landmark_measurements, global_landmarks, associated_cropped_bbox, n_landmarks):
         # Keeps track of global landmark ids already associated with this
         # pose.
         matched_lmark_ids = []
-
+        # print("global",np.array(global_landmarks).shape)
+        # print("prev,",np.array(prev_cropped_bb).shape)
         # loop through landmark measurements corresponding with pose
         for lmark_local_frame in landmarks:
-            lmark_rel_pos= lmark_local_frame[0:2]
+            lmark_rel_pos = lmark_local_frame[0:2]
             cropped_bbox = lmark_local_frame[2]
             lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_rel_pos, pose)
-            landmark_idx = Landmark_Associator.associate_with_global_landmarks(cropped_bbox, global_landmarks)
+            landmark_idx = Landmark_Associator.associate_with_global_landmarks_features(cropped_bbox, associated_cropped_bbox)
 
             if landmark_idx == -1:
                 # no match - assign a new id to this landmark
@@ -106,14 +119,15 @@ class Landmark_Associator:
                 n_landmarks += 1
 
                 # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
+
                 if len(global_landmarks) > 0:
                     global_landmarks = np.vstack([global_landmarks, new_global_landmark])
                 else:
                     global_landmarks = new_global_landmark
-
+                print("adding ")
                 landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, new_global_landmark[0,2], lmark_local_frame))
                 matched_lmark_ids.append(new_global_landmark[0,2])
-
+                associated_cropped_bbox = Landmark_Associator.add_new_cropped_bb_to_dict(cropped_bbox, new_global_landmark[0,2], associated_cropped_bbox)
             else:
                 # found a match
                 if global_landmarks[landmark_idx,2] == -1:
@@ -123,13 +137,19 @@ class Landmark_Associator:
                     n_landmarks += 1
 
                 if global_landmarks[landmark_idx,2] not in matched_lmark_ids:
+                    print("adding ")
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, global_landmarks[landmark_idx,2], lmark_local_frame))
                     matched_lmark_ids.append(global_landmarks[landmark_idx,2])
+                    associated_cropped_bbox = Landmark_Associator.add_new_cropped_bb_to_dict(cropped_bbox,
+                                                                                             global_landmarks[landmark_idx, 2],
+                                                                                             associated_cropped_bbox)
+        print("new globalinside", np.array(landmark_measurements).shape)
+        print("new previnside",len(associated_cropped_bbox))
 
-        return landmark_measurements, global_landmarks, n_landmarks
+        return landmark_measurements, global_landmarks, n_landmarks, associated_cropped_bbox
 
     @staticmethod
-    def associate_landmarks(prev_landmarks, new_landmarks,
+    def associate_landmarks(prev_landmarks,associated_cropped_bb, new_landmarks,
                             traj_estimate, odom_measurement, sigma_landmark):
         '''
         Associates new landmark observations with previously seen landmarks.
@@ -154,12 +174,10 @@ class Landmark_Associator:
 
         n_landmarks = 0
         prev_landmarks = np.array(prev_landmarks)
-
-        landmark_measurements = [] # pose_id,landmark_id,x,y
+        landmark_measurements = [] # pose_id,landmark_id,x,y,bb
         global_landmarks = [] # x,y,id
         if len(prev_landmarks) > 0:
             global_landmarks = np.hstack((prev_landmarks, -np.ones((len(prev_landmarks),1))))
-
         # iterate through poses in trajectory
         for pose_id in range(len(traj_estimate)):
             pose = traj_estimate[pose_id]
@@ -167,29 +185,32 @@ class Landmark_Associator:
 
             landmark_measurements,\
             global_landmarks,\
-            n_landmarks = Landmark_Associator.process_landmarks_at_pose(pose,
+            n_landmarks,associated_cropped_bb = Landmark_Associator.process_landmarks_at_pose(pose,
                                                                         pose_id,
                                                                         landmarks,
                                                                         landmark_measurements,
                                                                         global_landmarks,
+                                                                        associated_cropped_bb,
                                                                         n_landmarks)
 
-
-
+            # new_cropped_bboxes.append(new_cropped_bbox)
 
         # Take the most recent odom step and associate the most recent landmark
         # observations.
+        print("ENDD")
         pose_id = len(traj_estimate)
         pose_f = Landmark_Associator.apply_odom_step_2d(odom_measurement,
                                                         traj_estimate[-1])
         landmark_measurements,\
         global_landmarks,\
-        n_landmarks = Landmark_Associator.process_landmarks_at_pose(pose_f,
+        n_landmarks,associated_cropped_bb = Landmark_Associator.process_landmarks_at_pose(pose_f,
                                                                     pose_id,
                                                                     landmarks,
                                                                     landmark_measurements,
                                                                     global_landmarks,
+                                                                    associated_cropped_bb,
                                                                     n_landmarks)
 
+        # new_cropped_bboxes.append(new_cropped_bbox)
         landmark_measurements = np.array(landmark_measurements)
-        return landmark_measurements, n_landmarks
+        return landmark_measurements, n_landmarks, associated_cropped_bb
