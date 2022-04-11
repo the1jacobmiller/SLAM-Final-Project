@@ -87,7 +87,6 @@ class Factor_Graph_SLAM:
                                                                             self.sigma_landmark)
         # Build a linear system
         n_poses = len(odom_measurements)+1
-        print("landmark_measurements",np.array(landmark_measurements).shape)
 
         traj, landmarks = Factor_Graph_SLAM.init_states(p0, odom_measurements, landmark_measurements, n_poses, n_landmarks)
         init_traj = copy.deepcopy(traj)
@@ -110,8 +109,6 @@ class Factor_Graph_SLAM:
 
 
         traj, landmarks = self.devectorize_state(x, n_poses)
-        print("landmarks",np.array(landmarks).shape)
-        print("new_cropped_bb",len(self.associated_cropped_boxes))
         # Store the optimized traj and landmark positions
         self.list_of_trajs.append(traj)
         self.list_of_landmarks.append(landmarks)

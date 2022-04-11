@@ -19,6 +19,7 @@ class Landmark_Associator:
     @staticmethod
     def apply_odom_step_2d(odom_measurement, pose):
         return np.array([pose[0] + odom_measurement[0], pose[1] + odom_measurement[1], pose[2] + odom_measurement[2]])
+
     @staticmethod
     def add_new_cropped_bb_to_dict(cropped_bb,landmark_id, associated_cropped_bbox):
         if landmark_id in associated_cropped_bbox:
@@ -47,7 +48,6 @@ class Landmark_Associator:
     def associate_with_global_landmarks_features(new_cropped_bbox, prev_cropped_bboxes):
         if len(prev_cropped_bboxes) == 0:
             return -1
-        print(len(prev_cropped_bboxes))
         # Initiate ORB detector
         orb = cv.ORB_create()
         association_thresh = 2.0 # tuned p0 noise
@@ -59,7 +59,7 @@ class Landmark_Associator:
             return -1
         for idx in range(len(prev_cropped_bboxes)):
             lmark_cropped_bbox = prev_cropped_bboxes[idx][0]
-            assert(len(np.array(lmark_cropped_bbox).shape) == 3)
+            assert(len(np.array(lmark_cropped_bbox).shape) == 3) #making sure shape is correct
             # find the keypoints and descriptors with ORB
             _, landmark_des = orb.detectAndCompute(np.array(lmark_cropped_bbox), None)
             if landmark_des is None:
@@ -76,24 +76,22 @@ class Landmark_Associator:
         if max_num_matches > association_thresh:
             return closest_idx
         return -1
-    # @staticmethod
-    # def associate_with_global_landmarks(observation, global_landmarks):
-    #     # TODO: TUNE ME
-    #     association_thresh = 2.0 # tuned for euclidean dist with no p0 noise
-    #
-    #     min_dist = np.inf
-    #     closest_idx = -1
-    #     for idx in range(len(global_landmarks)):
-    #         global_landmark = global_landmarks[idx][0:2]
-    #         dist = Landmark_Associator.get_euclidean_distance(global_landmark, observation)
-    #
-    #         if dist < min_dist:
-    #             closest_idx = idx
-    #             min_dist = dist
-    #
-    #     if min_dist < association_thresh:
-    #         return closest_idx
-    #     return -1
+    @staticmethod
+    def associate_with_global_landmarks(observation, global_landmarks):
+        # TODO: TUNE ME
+        association_thresh = 2.0 # tuned for euclidean dist with no p0 noise
+        min_dist = np.inf
+        closest_idx = -1
+        for idx in range(len(global_landmarks)):
+            global_landmark = global_landmarks[idx][0:2]
+            dist = Landmark_Associator.get_euclidean_distance(global_landmark, observation)
+            if dist < min_dist:
+                closest_idx = idx
+                min_dist = dist
+
+        if min_dist < association_thresh:
+            return closest_idx
+        return -1
 
     @staticmethod
     def create_landmark_measurement(pose_id, landmark_id, observation):
@@ -104,8 +102,6 @@ class Landmark_Associator:
         # Keeps track of global landmark ids already associated with this
         # pose.
         matched_lmark_ids = []
-        # print("global",np.array(global_landmarks).shape)
-        # print("prev,",np.array(prev_cropped_bb).shape)
         # loop through landmark measurements corresponding with pose
         for lmark_local_frame in landmarks:
             lmark_rel_pos = lmark_local_frame[0:2]
@@ -124,7 +120,6 @@ class Landmark_Associator:
                     global_landmarks = np.vstack([global_landmarks, new_global_landmark])
                 else:
                     global_landmarks = new_global_landmark
-                print("adding ")
                 landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, new_global_landmark[0,2], lmark_local_frame))
                 matched_lmark_ids.append(new_global_landmark[0,2])
                 associated_cropped_bbox = Landmark_Associator.add_new_cropped_bb_to_dict(cropped_bbox, new_global_landmark[0,2], associated_cropped_bbox)
@@ -137,14 +132,11 @@ class Landmark_Associator:
                     n_landmarks += 1
 
                 if global_landmarks[landmark_idx,2] not in matched_lmark_ids:
-                    print("adding ")
                     landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, global_landmarks[landmark_idx,2], lmark_local_frame))
                     matched_lmark_ids.append(global_landmarks[landmark_idx,2])
                     associated_cropped_bbox = Landmark_Associator.add_new_cropped_bb_to_dict(cropped_bbox,
                                                                                              global_landmarks[landmark_idx, 2],
                                                                                              associated_cropped_bbox)
-        print("new globalinside", np.array(landmark_measurements).shape)
-        print("new previnside",len(associated_cropped_bbox))
 
         return landmark_measurements, global_landmarks, n_landmarks, associated_cropped_bbox
 
@@ -197,7 +189,6 @@ class Landmark_Associator:
 
         # Take the most recent odom step and associate the most recent landmark
         # observations.
-        print("ENDD")
         pose_id = len(traj_estimate)
         pose_f = Landmark_Associator.apply_odom_step_2d(odom_measurement,
                                                         traj_estimate[-1])
