@@ -45,12 +45,12 @@ class Landmark_Associator:
         return landmark_global_pos
 
     @staticmethod
-    def associate_with_global_landmarks_features(new_cropped_bbox, prev_cropped_bboxes):
+    def associate_with_orb_features(new_cropped_bbox, prev_cropped_bboxes):
         if len(prev_cropped_bboxes) == 0:
             return -1
         # Initiate ORB detector
         orb = cv.ORB_create()
-        association_thresh = 2.0 # tuned p0 noise
+        association_thresh = 20.0 # tuned p0 noise
         max_num_matches = 0
         closest_idx = -1
         # find the keypoints and descriptors with ORB
@@ -72,10 +72,10 @@ class Landmark_Associator:
             if len(matches) > max_num_matches:
                 closest_idx = idx
                 max_num_matches = len(matches)
-
         if max_num_matches > association_thresh:
             return closest_idx
         return -1
+
     @staticmethod
     def associate_with_global_landmarks(observation, global_landmarks):
         # TODO: TUNE ME
@@ -105,8 +105,8 @@ class Landmark_Associator:
         # loop through landmark measurements corresponding with pose
         for lmark_local_frame in landmarks:
             cropped_bbox = lmark_local_frame[2]
-            lmark_global_frame = Landmark_Associator.transform_to_global_frame( lmark_local_frame[0:2], pose)
-            landmark_idx = Landmark_Associator.associate_with_global_landmarks_features(cropped_bbox, associated_cropped_bbox)
+            lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame[0:2], pose)
+            landmark_idx = Landmark_Associator.associate_with_orb_features(cropped_bbox, associated_cropped_bbox)
 
             if landmark_idx == -1:
                 # no match - assign a new id to this landmark
@@ -176,7 +176,7 @@ class Landmark_Associator:
 
             landmark_measurements,\
             global_landmarks,\
-            n_landmarks,associated_cropped_bb = Landmark_Associator.process_landmarks_at_pose(pose,
+            n_landmarks, associated_cropped_bb = Landmark_Associator.process_landmarks_at_pose(pose,
                                                                         pose_id,
                                                                         landmarks,
                                                                         landmark_measurements,
@@ -184,7 +184,6 @@ class Landmark_Associator:
                                                                         associated_cropped_bb,
                                                                         n_landmarks)
 
-            # new_cropped_bboxes.append(new_cropped_bbox)
 
         # Take the most recent odom step and associate the most recent landmark
         # observations.
@@ -193,7 +192,7 @@ class Landmark_Associator:
                                                         traj_estimate[-1])
         landmark_measurements,\
         global_landmarks,\
-        n_landmarks,associated_cropped_bb = Landmark_Associator.process_landmarks_at_pose(pose_f,
+        n_landmarks, associated_cropped_bb = Landmark_Associator.process_landmarks_at_pose(pose_f,
                                                                     pose_id,
                                                                     landmarks,
                                                                     landmark_measurements,
@@ -201,6 +200,5 @@ class Landmark_Associator:
                                                                     associated_cropped_bb,
                                                                     n_landmarks)
 
-        # new_cropped_bboxes.append(new_cropped_bbox)
         landmark_measurements = np.array(landmark_measurements)
         return landmark_measurements, n_landmarks, associated_cropped_bb
