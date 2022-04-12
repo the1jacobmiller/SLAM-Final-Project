@@ -1,6 +1,7 @@
 import numpy as np
 from Pose import Pose
 # from src.Pose import Pose
+import cv2 as cv
 
 class Landmark_Associator:
     @staticmethod
@@ -37,6 +38,43 @@ class Landmark_Associator:
         return landmark_global_pos
 
     @staticmethod
+    def associate_with_orb_features(new_cropped_bbox, global_landmarks):
+        if len(global_landmarks) == 0:
+            return -1
+        # Initiate ORB detector
+        orb = cv.ORB_create()
+        association_thresh = 1.0  # tuned p0 noise
+        max_num_matches = 0
+        closest_idx = -1
+        # find the keypoints and descriptors with ORB
+        _, obs_des = orb.detectAndCompute(np.array(new_cropped_bbox), None)
+        if obs_des is None:
+            return -1
+        print("in features",np.array(global_landmarks, dtype=object).shape)
+
+        for idx in range(len(global_landmarks)):
+            # print("global landmarks at an indez",global_landmarks[idx])
+            lmark_cropped_bbox = global_landmarks[idx][2][0]
+            # print(np.array(lmark_cropped_bbox).shape)
+
+            assert (len(np.array(lmark_cropped_bbox).shape) == 3)  # making sure shape is correct
+            # find the keypoints and descriptors with ORB
+            _, landmark_des = orb.detectAndCompute(np.array(lmark_cropped_bbox), None)
+            if landmark_des is None:
+                continue
+            bf = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
+            # Match descriptors.
+            matches = bf.match(obs_des, landmark_des)
+            # Sort them in the order of their distance.
+            matches = sorted(matches, key=lambda x: x.distance)
+            if len(matches) > max_num_matches:
+                closest_idx = idx
+                max_num_matches = len(matches)
+        if max_num_matches > association_thresh:
+            return closest_idx
+        return -1
+
+    @staticmethod
     def associate_with_global_landmarks(observation, global_landmarks):
         # TODO: TUNE ME
         association_thresh = 2.0 # tuned for euclidean dist with no p0 noise
@@ -67,35 +105,39 @@ class Landmark_Associator:
 
         # loop through landmark measurements corresponding with pose
         for lmark_local_frame in landmarks:
-            lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
-            landmark_idx = Landmark_Associator.associate_with_global_landmarks(lmark_global_frame, global_landmarks)
-
+            cropped_bbox = lmark_local_frame[2]
+            lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame[0:2], pose)
+            landmark_idx = Landmark_Associator.associate_with_orb_features(cropped_bbox, global_landmarks)
             if landmark_idx == -1:
                 # no match - assign a new id to this landmark
-                new_global_landmark = np.array([lmark_global_frame[0], lmark_global_frame[1], n_landmarks]).reshape((1,3))
-                n_landmarks += 1
-
+                new_global_landmark = np.array([lmark_global_frame[0], lmark_global_frame[1], [cropped_bbox], n_landmarks],dtype=object).reshape(1,4)
+                # print("to ", new_global_landmark)
                 # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
                 if len(global_landmarks) > 0:
                     global_landmarks = np.vstack([global_landmarks, new_global_landmark])
                 else:
                     global_landmarks = new_global_landmark
 
-                landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, new_global_landmark[0,2], lmark_local_frame))
-                matched_lmark_ids.append(new_global_landmark[0,2])
+                landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, lmark_local_frame))
+                matched_lmark_ids.append(n_landmarks)
+                n_landmarks += 1
+
 
             else:
                 # found a match
-                if global_landmarks[landmark_idx,2] == -1:
+                if global_landmarks[landmark_idx,-1] == -1:
                     # We haven't seen this landmark yet in this iteration.
                     # Assign this global landmark an id
-                    global_landmarks[landmark_idx,2] = n_landmarks
+                    global_landmarks[landmark_idx,-1] = n_landmarks
+                    print("to ",global_landmarks[landmark_idx,3])
+                    global_landmarks[landmark_idx,2].append(cropped_bbox)
                     n_landmarks += 1
 
-                if global_landmarks[landmark_idx,2] not in matched_lmark_ids:
-                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, global_landmarks[landmark_idx,2], lmark_local_frame))
-                    matched_lmark_ids.append(global_landmarks[landmark_idx,2])
-
+                if global_landmarks[landmark_idx,-1] not in matched_lmark_ids:
+                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, global_landmarks[landmark_idx,-1], lmark_local_frame))
+                    matched_lmark_ids.append(global_landmarks[landmark_idx,-1])
+        # print(np.array(global_landmarks, dtype=object).shape)
+        # print(np.array(global_landmarks, dtype=object))
         return landmark_measurements, global_landmarks, n_landmarks
 
     @staticmethod
@@ -123,13 +165,12 @@ class Landmark_Associator:
         '''
 
         n_landmarks = 0
-        prev_landmarks = np.array(prev_landmarks)
+        prev_landmarks = np.array(prev_landmarks,dtype=object)
 
         landmark_measurements = [] # pose_id,landmark_id,x,y
         global_landmarks = [] # x,y,id
         if len(prev_landmarks) > 0:
             global_landmarks = np.hstack((prev_landmarks, -np.ones((len(prev_landmarks),1))))
-
         # iterate through poses in trajectory
         for pose_id in range(len(traj_estimate)):
             pose = traj_estimate[pose_id]
@@ -162,4 +203,6 @@ class Landmark_Associator:
                                                                     n_landmarks)
 
         landmark_measurements = np.array(landmark_measurements)
-        return landmark_measurements, n_landmarks
+        print(np.array(global_landmarks, dtype=object).shape)
+        print("associated landmarks",np.array(global_landmarks, dtype=object))
+        return landmark_measurements, global_landmarks, n_landmarks

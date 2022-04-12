@@ -79,7 +79,7 @@ class Factor_Graph_SLAM:
         assert len(odom_measurements)+1 == len(landmarks)
 
         # Associate landmark measurements with previously seen landmarks
-        landmark_measurements, n_landmarks = Associator.associate_landmarks(prev_landmarks,
+        landmark_measurements, global_landmarks, n_landmarks = Associator.associate_landmarks(prev_landmarks,
                                                                             landmarks,
                                                                             traj_estimate,
                                                                             odom_measurements[-1],
@@ -107,11 +107,30 @@ class Factor_Graph_SLAM:
 
 
         traj, landmarks = self.devectorize_state(x, n_poses)
+        #add the cropped bounding boxes to the landmarks
+        print(np.array(global_landmarks, dtype=object).shape)
+        print("process_cropped_bb", np.array(global_landmarks, dtype=object))
+
+        landmarks_list = Factor_Graph_SLAM.process_cropped_bb(global_landmarks, landmarks)
         # Store the optimized traj and landmark positions
         self.list_of_trajs.append(traj)
-        self.list_of_landmarks.append(landmarks)
+        self.list_of_landmarks.append(landmarks_list)
 
         return traj, landmarks, R, A, b, init_traj
+    @staticmethod
+    def process_cropped_bb(global_landmarks, landmarks):
+        landmarks_list = landmarks.tolist()
+        for global_lmark in global_landmarks:
+
+            # print("global_", global_lmark)
+            landmark_id = global_lmark[-1]
+            assert (landmark_id >=0)
+            # print(landmark_id)
+            # print("before",landmarks_list[landmark_id])
+            landmarks_list[landmark_id].append(global_lmark[2])
+            # print("after",landmarks_list[landmark_id])
+        return landmarks_list
+
 
     def create_linear_system(self, x, odom_measurements, landmark_measurements,
                              p0, n_poses, n_landmarks):
@@ -234,7 +253,7 @@ class Factor_Graph_SLAM:
             pose_idx = int(observations[i, 0])
             landmark_idx = int(observations[i, 1])
 
-            # if we haven't estiamted this landmarks global pos yet
+            # if we haven't estimated this landmarks global pos yet
             if not landmarks_mask[landmark_idx]:
 
                 pose = traj[pose_idx, :]
