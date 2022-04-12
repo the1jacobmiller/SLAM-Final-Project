@@ -107,10 +107,8 @@ class Factor_Graph_SLAM:
 
 
         traj, landmarks = self.devectorize_state(x, n_poses)
-        #add the cropped bounding boxes to the landmarks
-        # print(np.array(global_landmarks, dtype=object).shape)
-        # print("process_cropped_bb", np.array(global_landmarks, dtype=object))
 
+        #add the cropped bounding boxes to the landmarks
         landmarks_list = Factor_Graph_SLAM.process_cropped_bb(global_landmarks, landmarks)
         # Store the optimized traj and landmark positions
         self.list_of_trajs.append(traj)
@@ -122,13 +120,11 @@ class Factor_Graph_SLAM:
         landmarks_list = landmarks.tolist()
         for global_lmark in global_landmarks:
 
-            # print("global_", global_lmark)
             landmark_id = global_lmark[-1]
-            assert (landmark_id >=0)
-            # print(landmark_id)
-            # print("before",landmarks_list[landmark_id])
+            #We ignore the landmarks that were dropped
+            if landmark_id == -1:
+                continue
             landmarks_list[landmark_id].append(global_lmark[2])
-            # print("after",landmarks_list[landmark_id])
         return landmarks_list
 
 
