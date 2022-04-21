@@ -18,7 +18,9 @@ if __name__ == "__main__":
     parser.add_argument('--n_frames', default=np.inf,
         help='[int] number of frames to process for SLAM')
     parser.add_argument('--plot_R', action='store_true')
-    parser.add_argument('--plot_traj_and_landmarks', action='store_true')
+    parser.add_argument('--plot_traj_and_landmarks', action='store_true',
+                        default=True)
+    parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()
 
     # check argument values
@@ -58,8 +60,8 @@ if __name__ == "__main__":
         runtime = time.time() - start_time
         print(f'Iteration {i} took {runtime:.5f} s')
 
-        # DEBUG
-        if i >= 1:
+
+        if args.debug:
             SLAM.plot_traj_and_landmarks(traj, landmarks, gps_measurements, gt_traj,
                                          gt_landmarks, init_traj, p_init=p0)
 
@@ -68,7 +70,6 @@ if __name__ == "__main__":
         plt.show()
 
     # Visualize the final result
-    # TODO: add this conditional back in, just removed for debugging
-    # if args.plot_traj_and_landmarks:
-    SLAM.plot_traj_and_landmarks(traj, landmarks, gps_measurements, gt_traj,
-                                 gt_landmarks, init_traj, p_init=p0)
+    if args.plot_traj_and_landmarks:
+        SLAM.plot_traj_and_landmarks(traj, landmarks, gps_measurements, gt_traj,
+                                     gt_landmarks, init_traj, p_init=p0)
