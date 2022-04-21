@@ -141,9 +141,9 @@ class Landmark_Associator:
         for lmark_local_frame in landmarks:
             cropped_bbox = lmark_local_frame[2]
             lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame[0:2], pose)
-            landmark_idx = Landmark_Associator.associate_with_orb_features(cropped_bbox, global_landmarks)
+            # landmark_idx = Landmark_Associator.associate_with_orb_features(cropped_bbox, global_landmarks)
 
-            # landmark_idx = Landmark_Associator.associate_with_global_landmarks(lmark_global_frame, global_landmarks)
+            landmark_idx = Landmark_Associator.associate_with_global_landmarks(lmark_global_frame, global_landmarks)
             if landmark_idx == -1:
                 # no match - assign a new id to this landmark
                 new_global_landmark = np.array([lmark_global_frame[0], lmark_global_frame[1], [cropped_bbox], n_landmarks],dtype=object).reshape(1,4)
