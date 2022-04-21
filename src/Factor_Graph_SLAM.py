@@ -41,7 +41,8 @@ class Factor_Graph_SLAM:
         else:
             raise NotImplementedError
 
-    def run(self, odom_measurements, landmarks, gps_measurements, p0, step_convergence_thresh=1e-5, max_iters=10):
+    def run(self, odom_measurements, landmarks, gps_measurements, p0,
+            step_convergence_thresh=1e-8, max_iters=25):
         '''
         Solves the factor graph SLAM problem.
 
@@ -96,10 +97,10 @@ class Factor_Graph_SLAM:
             x = x + dx
 
             if np.linalg.norm(dx) < step_convergence_thresh:
-                print(f"\tHit convergence threshold! Iters: {i}  (final dx norm: {np.linalg.norm(dx):.4E})")
+                print(f'\tHit convergence threshold! Iters: {i}  (final dx norm: {np.linalg.norm(dx):.4E})')
                 break
             elif i+1 == max_iters:
-                print(f"\tHit iteration limit! Iters: {i+1}  (final dx norm: {np.linalg.norm(dx):.4E})")
+                print(f'\tHit iteration limit! Iters: {i+1}  (final dx norm: {np.linalg.norm(dx):.4E})')
 
 
         traj, landmarks = self.devectorize_state(x, n_poses)
@@ -158,21 +159,16 @@ class Factor_Graph_SLAM:
 
         # apply GPS measurements
         for gps_idx in range(n_gps):
-            # if gps_idx == 0:
-            #     # use p0 instead
-            #     gps_pose = p0
-            # else:
-            #     gps_pose = gps_measurements[gps_idx][1:]
             gps_pose = gps_measurements[gps_idx][1:]
 
+            # traj estimate pose corresponding to gps measurement
             pose_idx = int(gps_measurements[gps_idx][0])
             pose = x[pose_dims*pose_idx:pose_dims*(pose_idx+1)]
+
+            # I for rows corresponding to traj estimate pose
             A[self.dimensions*gps_idx:self.dimensions*(gps_idx+1), pose_dims*pose_idx:pose_dims*pose_idx + self.dimensions] = \
                         np.eye(self.dimensions) @ sqrt_gps_pose
             b[self.dimensions*gps_idx:self.dimensions*(gps_idx+1)] = (gps_pose[:self.dimensions] - pose[:self.dimensions]) @ sqrt_gps_pose
-        # anchor initial state at p0
-        # A[:pose_dims,:pose_dims] = np.eye(pose_dims) @ sqrt_gps_pose
-        # b[:pose_dims] = (p0[:pose_dims] - x[:pose_dims]) @ sqrt_gps_pose
 
         # Fill in odometry measurements
         for odom_idx in range(n_odom):
