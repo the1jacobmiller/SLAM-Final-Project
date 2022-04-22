@@ -60,7 +60,6 @@ if __name__ == "__main__":
         runtime = time.time() - start_time
         print(f'Iteration {i} took {runtime:.5f} s')
 
-
         if args.debug:
             SLAM.plot_traj_and_landmarks(traj, landmarks, gps_measurements, gt_traj,
                                          gt_landmarks, init_traj, p_init=p0)
