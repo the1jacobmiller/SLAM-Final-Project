@@ -39,7 +39,7 @@ class Landmark_Associator:
     @staticmethod
     def associate_with_global_landmarks(observation, global_landmarks):
         # TODO: TUNE ME
-        association_thresh = 2.0 # tuned for euclidean dist with no p0 noise
+        association_thresh = 3.0 # tuned for euclidean dist with no p0 noise
 
         min_dist = np.inf
         closest_idx = -1

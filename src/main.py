@@ -21,6 +21,8 @@ if __name__ == "__main__":
     parser.add_argument('--plot_traj_and_landmarks', action='store_true')
     args = parser.parse_args()
 
+    np.random.seed(1)
+
     # check argument values
     assert(0 < args.n_dims < 4)
 
@@ -40,6 +42,8 @@ if __name__ == "__main__":
     SLAM = Factor_Graph_SLAM(args.method, dimensions=args.n_dims)
 
     traj, landmarks, R = None, None, None
+    iter_runtimes = []
+    total_traj_start = time.time()
     for i in range(2,n_frames):
         start_time = time.time()
 
@@ -51,15 +55,23 @@ if __name__ == "__main__":
                                                        landmark_measurements[:i],
                                                        p0)
         runtime = time.time() - start_time
+        iter_runtimes.append(runtime)
         print('Iteration', i, 'took', runtime, 's')
-        # SLAM.plot_traj_and_landmarks(traj, landmarks, gt_traj, gt_landmarks, p_init=p0)
+
+    runtime = runtime = time.time() - total_traj_start
+    print('The full trajectory took', runtime, 's')
+    print('The avg. runtime per frame was', runtime/n_frames)
+
+    plt.plot(np.arange(2,n_frames), iter_runtimes, 'b-')
+    plt.xlabel("Frame")
+    plt.ylabel("Runtime (s)")
+    plt.show()
 
     if args.plot_R and R is not None:
         plt.spy(R)
         plt.show()
 
     # Visualize the final result
-    # TODO: add this conditional back in, just removed for debugging
-    # if args.plot_traj_and_landmarks:
-    SLAM.plot_traj_and_landmarks(traj, landmarks, gps_measurements, gt_traj,
-                                 gt_landmarks, init_traj, p_init=p0)
+    if args.plot_traj_and_landmarks:
+        SLAM.plot_traj_and_landmarks(traj, landmarks, gps_measurements, gt_traj,
+                                     gt_landmarks, init_traj, p_init=p0)
