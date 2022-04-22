@@ -18,7 +18,9 @@ if __name__ == "__main__":
     parser.add_argument('--n_frames', default=np.inf,
         help='[int] number of frames to process for SLAM')
     parser.add_argument('--plot_R', action='store_true')
-    parser.add_argument('--plot_traj_and_landmarks', action='store_true')
+    parser.add_argument('--plot_traj_and_landmarks', action='store_true',
+                        default=True)
+    parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()
 
     np.random.seed(1)
@@ -42,10 +44,17 @@ if __name__ == "__main__":
     SLAM = Factor_Graph_SLAM(args.method, dimensions=args.n_dims)
 
     traj, landmarks, R = None, None, None
+<<<<<<< HEAD
     iter_runtimes = []
     total_traj_start = time.time()
+=======
+
+>>>>>>> 357ad2f15b5bab54f822d9c7b203212c4048cf73
     for i in range(2,n_frames):
         start_time = time.time()
+
+        # only want GPS data up until current frame
+        gps_indices = np.where(gps_measurements[:,0] < i)[0]
 
         # Solve the factor graph SLAM problem with frames 0 to i
         # Note: there are landmark measurements at p0, but the first odom
@@ -53,8 +62,10 @@ if __name__ == "__main__":
         # row in odom_measurements than landmark_measurements.
         traj, landmarks, R, A, b, init_traj = SLAM.run(odom_measurements[:i-1],
                                                        landmark_measurements[:i],
+                                                       gps_measurements[gps_indices],
                                                        p0)
         runtime = time.time() - start_time
+<<<<<<< HEAD
         iter_runtimes.append(runtime)
         print('Iteration', i, 'took', runtime, 's')
 
@@ -66,6 +77,13 @@ if __name__ == "__main__":
     plt.xlabel("Frame")
     plt.ylabel("Runtime (s)")
     plt.show()
+=======
+        print(f'Iteration {i} took {runtime:.5f} s')
+
+        if args.debug:
+            SLAM.plot_traj_and_landmarks(traj, landmarks, gps_measurements, gt_traj,
+                                         gt_landmarks, init_traj, p_init=p0)
+>>>>>>> 357ad2f15b5bab54f822d9c7b203212c4048cf73
 
     if args.plot_R and R is not None:
         plt.spy(R)

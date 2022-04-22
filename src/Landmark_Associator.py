@@ -1,6 +1,8 @@
 import numpy as np
 from Pose import Pose
 # from src.Pose import Pose
+import cv2 as cv
+import matplotlib.pyplot as plt
 
 class Landmark_Associator:
     @staticmethod
@@ -37,6 +39,76 @@ class Landmark_Associator:
         return landmark_global_pos
 
     @staticmethod
+    def associate_with_orb_features(new_cropped_bbox, global_landmarks, debug=False, use_orb=True):
+        if len(global_landmarks) == 0:
+            return -1
+        feature_method = cv.ORB_create() if use_orb else cv.SIFT_create()
+        association_thresh = 3.0 if use_orb else 0.7
+        max_num_matches = 0
+        closest_idx = -1
+        # find the keypoints and descriptors with ORB
+        obs_k, obs_des = feature_method.detectAndCompute(np.array(new_cropped_bbox), None)
+        if obs_des is None:
+            return -1
+
+        for idx in range(len(global_landmarks)):
+            lmark_cropped_bbox = global_landmarks[idx][2][0]
+
+            assert (len(np.array(lmark_cropped_bbox).shape) == 3)  # making sure shape is correct
+            # find the keypoints and descriptors with ORB
+            lmark_k, landmark_des = feature_method.detectAndCompute(np.array(lmark_cropped_bbox), None)
+
+            if landmark_des is None:
+                continue
+            if use_orb:
+                bf = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=False)
+                # Match descriptors.
+                matches = bf.match(obs_des, landmark_des)
+
+                # Sort them in the order of their distance.
+                matches = sorted(matches, key=lambda x: x.distance)
+                if debug:
+                    img3 = cv.drawMatches(np.array(new_cropped_bbox), obs_k, np.array(lmark_cropped_bbox), lmark_k, matches, None,
+                                          flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+                    plt.imshow(img3)
+                    plt.show()
+                if len(matches) > max_num_matches:
+                    closest_idx = idx
+                    max_num_matches = len(matches)
+            else:
+                dist_thresh = 0.7
+                FLANN_INDEX_KDTREE = 1
+                index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+                search_params = dict(checks=50)  # or pass empty dictionary
+                flann = cv.FlannBasedMatcher(index_params, search_params)
+                matches = flann.knnMatch(obs_des, landmark_des, k=2)
+
+                if debug:
+                    matchesMask = [[0, 0] for i in range(len(matches))]
+                    # ratio test as per Lowe's paper
+                    for i, (m, n) in enumerate(matches):
+                        if m.distance < dist_thresh * n.distance:
+                            matchesMask[i] = [1, 0]
+                    draw_params = dict(matchColor=(0, 255, 0),
+                                       singlePointColor=(255, 0, 0),
+                                       matchesMask=matchesMask,
+                                       flags=cv.DrawMatchesFlags_DEFAULT)
+                    img3 = cv.drawMatchesKnn(np.array(new_cropped_bbox), obs_k, np.array(lmark_cropped_bbox), lmark_k, matches, None, **draw_params)
+                    plt.imshow(img3)
+                    plt.show()
+                num_successful_matches = 0
+                for i, (m, n) in enumerate(matches):
+                    if m.distance < dist_thresh * n.distance:
+                        num_successful_matches += 1
+                match_ratio = num_successful_matches/len(matches)
+                if match_ratio > max_num_matches:
+                    closest_idx = idx
+                    max_num_matches = match_ratio
+        if max_num_matches > association_thresh:
+            return closest_idx
+        return -1
+
+    @staticmethod
     def associate_with_global_landmarks(observation, global_landmarks):
         # TODO: TUNE ME
         association_thresh = 3.0 # tuned for euclidean dist with no p0 noise
@@ -67,35 +139,34 @@ class Landmark_Associator:
 
         # loop through landmark measurements corresponding with pose
         for lmark_local_frame in landmarks:
-            lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame, pose)
-            landmark_idx = Landmark_Associator.associate_with_global_landmarks(lmark_global_frame, global_landmarks)
+            cropped_bbox = lmark_local_frame[2]
+            lmark_global_frame = Landmark_Associator.transform_to_global_frame(lmark_local_frame[0:2], pose)
+            # landmark_idx = Landmark_Associator.associate_with_orb_features(cropped_bbox, global_landmarks)
 
+            landmark_idx = Landmark_Associator.associate_with_global_landmarks(lmark_global_frame, global_landmarks)
             if landmark_idx == -1:
                 # no match - assign a new id to this landmark
-                new_global_landmark = np.array([lmark_global_frame[0], lmark_global_frame[1], n_landmarks]).reshape((1,3))
-                n_landmarks += 1
-
+                new_global_landmark = np.array([lmark_global_frame[0], lmark_global_frame[1], [cropped_bbox], n_landmarks],dtype=object).reshape(1,4)
                 # add new landmark to prev_landmarks so we can (potentially) match new landmarks to it
                 if len(global_landmarks) > 0:
                     global_landmarks = np.vstack([global_landmarks, new_global_landmark])
                 else:
                     global_landmarks = new_global_landmark
 
-                landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, new_global_landmark[0,2], lmark_local_frame))
-                matched_lmark_ids.append(new_global_landmark[0,2])
-
+                landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, n_landmarks, lmark_local_frame))
+                matched_lmark_ids.append(n_landmarks)
+                n_landmarks += 1
             else:
                 # found a match
-                if global_landmarks[landmark_idx,2] == -1:
+                if global_landmarks[landmark_idx,-1] == -1:
                     # We haven't seen this landmark yet in this iteration.
                     # Assign this global landmark an id
-                    global_landmarks[landmark_idx,2] = n_landmarks
+                    global_landmarks[landmark_idx,-1] = n_landmarks
+                    global_landmarks[landmark_idx,2].append(cropped_bbox)
                     n_landmarks += 1
-
-                if global_landmarks[landmark_idx,2] not in matched_lmark_ids:
-                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, global_landmarks[landmark_idx,2], lmark_local_frame))
-                    matched_lmark_ids.append(global_landmarks[landmark_idx,2])
-
+                if global_landmarks[landmark_idx,-1] not in matched_lmark_ids:
+                    landmark_measurements.append(Landmark_Associator.create_landmark_measurement(pose_id, global_landmarks[landmark_idx,-1], lmark_local_frame))
+                    matched_lmark_ids.append(global_landmarks[landmark_idx,-1])
         return landmark_measurements, global_landmarks, n_landmarks
 
     @staticmethod
@@ -123,13 +194,12 @@ class Landmark_Associator:
         '''
 
         n_landmarks = 0
-        prev_landmarks = np.array(prev_landmarks)
+        prev_landmarks = np.array(prev_landmarks,dtype=object)
 
         landmark_measurements = [] # pose_id,landmark_id,x,y
         global_landmarks = [] # x,y,id
         if len(prev_landmarks) > 0:
             global_landmarks = np.hstack((prev_landmarks, -np.ones((len(prev_landmarks),1))))
-
         # iterate through poses in trajectory
         for pose_id in range(len(traj_estimate)):
             pose = traj_estimate[pose_id]
@@ -162,4 +232,4 @@ class Landmark_Associator:
                                                                     n_landmarks)
 
         landmark_measurements = np.array(landmark_measurements)
-        return landmark_measurements, n_landmarks
+        return landmark_measurements, global_landmarks, n_landmarks
