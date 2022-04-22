@@ -94,7 +94,7 @@ class Factor_Graph_SLAM:
             A, b = self.create_linear_system(x, odom_measurements, landmark_measurements, gps_measurements,
                                              p0, n_poses, n_landmarks)
             dx, R = Solver.solve(A, b, self.method)
-            x = x + dx
+            x = x + dx.reshape(x.shape)
 
             if np.linalg.norm(dx) < step_convergence_thresh:
                 print(f'\tHit convergence threshold! Iters: {i}  (final dx norm: {np.linalg.norm(dx):.4E})')
